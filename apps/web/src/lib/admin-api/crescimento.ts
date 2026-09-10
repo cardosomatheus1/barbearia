@@ -49,6 +49,8 @@ export interface CadastroDoWhatsAppNaTela {
 }
 
 export interface TemplateNaTelaDoAdmin {
+  readonly canal: 'meta' | 'baileys';
+  readonly disponivel: boolean;
   readonly id: string;
   readonly tipo: string;
   readonly nome: string;
@@ -176,6 +178,7 @@ export const mandarMensagemNaApi = (
     { customerId, ...qual },
     token,
     idempotencyKey,
+    30_000,
   );
 
 export const conciliarWhatsAppNaApi = (token: string) =>
@@ -549,4 +552,3 @@ export const crescimentoNaApi = (token: string, de: string, ate: string) =>
     undefined,
     token,
   );
-

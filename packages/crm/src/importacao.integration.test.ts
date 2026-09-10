@@ -315,7 +315,7 @@ describeIfDb('importação de base', () => {
     // confere e desiste: a cópia ficava sem prazo nenhum.
     const abandonado = await analisar();
     await admin.$executeRawUnsafe(`
-      UPDATE imports SET created_at = now() - interval '30 days' WHERE id = '${abandonado.id}'
+      UPDATE imports SET created_at = '${AGORA.toISOString()}'::timestamptz - interval '30 days' WHERE id = '${abandonado.id}'
     `);
 
     // Qualquer importação nova faz a faxina.

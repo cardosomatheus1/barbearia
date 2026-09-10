@@ -160,10 +160,11 @@ exigir(
 
 
 const pspPlataforma = ler('packages/platform/src/psp.ts');
+const reservaSaas=ler('packages/platform/src/cobranca-reserva.ts');
 const stripePagamento = ler('packages/platform/src/stripe-pagamento.ts');
 exigir(
   pspPlataforma.includes('readonly tentativa: number') &&
-    pspPlataforma.includes('tentativa: pedido.tentativa'),
+    pspPlataforma.includes('cobrarComReserva(pedido, this.psp)') && reservaSaas.includes('tentativa: reserva.attempt'),
   'tentativa da régua deve atravessar até o adquirente da plataforma',
 );
 exigir(
@@ -287,11 +288,12 @@ exigir(
 // segunda mensagem. A intenção nasce antes da rede e `sending/uncertain`
 // bloqueiam nova tentativa automática.
 const notificacoesJobs = ler('packages/jobs/src/notificacoes.ts');
+const desfechoJobs = ler('packages/jobs/src/notificacao-desfecho.ts');
 const migracaoNotificacaoAutomatica = ler('packages/db/migrations/0106_notificacao_automatica_idempotente.sql');
 exigir(
   notificacoesJobs.includes('notification_send_intents') &&
     notificacoesJobs.includes('WhatsAppDeliveryUnknownError') &&
-    notificacoesJobs.includes("finalizarIntencaoDeEnvio(tx, intentKey, 'uncertain')") &&
+    notificacoesJobs.includes("registrarDesfechoDaNotificacao(tx, { intentKey") && desfechoJobs.includes("UPDATE notification_send_intents SET notification_id") &&
     notificacoesJobs.includes("motivo: 'entrega_incerta'"),
   'lembrete/fila precisam persistir intenção e não repetir envio ambíguo da Meta',
 );
@@ -301,8 +303,8 @@ exigir(
   'banco precisa serializar a intenção de aviso automático antes da rede',
 );
 exigir(
-  notificacoesJobs.includes('const intentKey = `retorno:${linha.customer_id}:${episodio}`') &&
-    notificacoesJobs.includes("'retorno', ${linha.customer_id}::uuid, 'failed', 'entrega_incerta'") &&
+  notificacoesJobs.includes('const intentKey = `retorno:${linha.customer_id}:${episodio}:') &&
+    notificacoesJobs.includes("intentKey, tipo: 'retorno', customerId: linha.customer_id") && desfechoJobs.includes("p.estado === 'sent' ? null : 'entrega_incerta'") &&
     notificacoesJobs.includes("(n.status = 'sent' OR n.reason = 'entrega_incerta')"),
   'convite de retorno também precisa tratar entrega ambígua como at-most-once',
 );

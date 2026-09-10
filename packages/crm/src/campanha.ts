@@ -299,6 +299,7 @@ export async function puladosDaCampanha(
  */
 export async function criarCampanha(params: {
   readonly tenantId: string;
+  readonly locationId?: string;
   readonly nome: string;
   readonly filtro: FiltroDeCampanha;
   readonly valorDoFiltro: number | null;
@@ -378,15 +379,16 @@ export async function criarCampanha(params: {
     let tipo = params.tipo;
     if (params.templateId) {
       const doTexto = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
-        SELECT kind::text AS kind FROM whatsapp_templates
-         WHERE id = ${params.templateId}::uuid AND status = 'aprovado'
+        SELECT kind::text AS kind FROM whatsapp_templates_disponiveis
+         WHERE id = ${params.templateId}::uuid
+           AND (${params.locationId ?? null}::uuid IS NULL OR location_id = ${params.locationId ?? null}::uuid)
       `;
       const achado = doTexto[0];
       if (!achado) {
         // Aprovado também: a tela só oferece aprovados, mas a borda aceita
         // qualquer uuid — e uma campanha apontada para um rascunho sairia
         // com o público congelado e nenhuma mensagem, sem erro nenhum.
-        throw new CampanhaError('invalida', 'Este texto não existe ou não foi aprovado.');
+        throw new CampanhaError('invalida', 'Este texto não está disponível na conexão selecionada.');
       }
       tipo = achado.kind;
       if (!tipoDeCampanhaValido(tipo)) {
@@ -534,6 +536,8 @@ function condicaoDoFiltro(params: {
 
 export interface AlvoAEnviar {
   readonly id: string;
+  readonly locationId: string;
+  readonly timeZone: string;
   readonly customerId: string;
   readonly telefone: string;
   readonly clienteNome: string;
@@ -558,6 +562,8 @@ export async function alvosAEnviar(
     const linhas = await tx.$queryRaw<
       {
         id: string;
+        location_id: string;
+        timezone: string;
         customer_id: string;
         phone_e164: string;
         name: string;
@@ -566,18 +572,23 @@ export async function alvosAEnviar(
         template_id: string | null;
       }[]
     >`
-      SELECT t.id, t.customer_id, c.phone_e164, c.name, tn.name AS barbearia,
+      SELECT l.id AS location_id, l.timezone, t.id, t.customer_id, c.phone_e164, c.name, tn.name AS barbearia,
              ca.kind::text AS kind, ca.template_id
         FROM campaign_targets t
         JOIN campaigns ca ON ca.id = t.campaign_id
         JOIN customers c ON c.id = t.customer_id
         JOIN tenants tn ON tn.id = t.tenant_id
+        LEFT JOIN whatsapp_templates w ON w.id = ca.template_id
+        JOIN LATERAL (SELECT id, timezone FROM locations
+          WHERE (ca.template_id IS NULL OR id = w.location_id) ORDER BY created_at, id LIMIT 1) l ON true
        WHERE t.campaign_id = ${campanhaId}::uuid
          AND t.sent_at IS NULL AND t.skipped_reason IS NULL
        LIMIT ${limite}
     `;
     return linhas.map((l) => ({
       id: l.id,
+      locationId: l.location_id,
+      timeZone: l.timezone,
       customerId: l.customer_id,
       telefone: l.phone_e164,
       clienteNome: l.name,
@@ -703,8 +714,8 @@ export async function despacharCampanha(params: {
           (SELECT count(*) FROM notifications n
             WHERE n.customer_id = ${alvo.customerId}::uuid AND n.status = 'sent'
               AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
-              AND (n.sent_at AT TIME ZONE ${params.timeZone})::date
-                = (${params.agora}::timestamptz AT TIME ZONE ${params.timeZone})::date) AS hoje,
+              AND (n.sent_at AT TIME ZONE ${alvo.timeZone})::date
+                = (${params.agora}::timestamptz AT TIME ZONE ${alvo.timeZone})::date) AS hoje,
           (SELECT count(*) FROM notifications n
             WHERE n.customer_id = ${alvo.customerId}::uuid AND n.status = 'sent'
               AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
@@ -741,7 +752,7 @@ export async function despacharCampanha(params: {
       atrasoMinutos: 0,
       fatoEm: params.agora,
       agora: params.agora,
-      timeZone: params.timeZone,
+      timeZone: alvo.timeZone,
     });
 
     if (!decisao.disparar || !decisao.quando || decisao.quando.getTime() > params.agora.getTime()) {
@@ -769,7 +780,7 @@ export async function despacharCampanha(params: {
         intentKey,
         tipo: alvo.tipo,
         agora: params.agora,
-        timeZone: params.timeZone,
+        timeZone: alvo.timeZone,
       }),
     );
 
@@ -813,13 +824,6 @@ export async function despacharCampanha(params: {
     }
 
     await withTenant(params.tenantId, async (tx) => {
-      const afetadas = await tx.$executeRaw`
-        UPDATE campaign_targets
-           SET sent_at = ${params.agora}, wamid = ${wamid}, skipped_reason = NULL
-         WHERE id = ${alvo.id}::uuid AND sent_at IS NULL
-      `;
-      if (afetadas !== 1) throw new Error('alvo deixou de pertencer a este despacho');
-
       const confirmou = await confirmarDisparoPromocional(tx, {
         intentKey,
         tipo: alvo.tipo,
@@ -829,6 +833,15 @@ export async function despacharCampanha(params: {
         enviadoEm: params.agora,
       });
       if (!confirmou) throw new Error('reserva promocional da campanha não pôde ser confirmada');
+
+      const afetadas = await tx.$executeRaw`
+        UPDATE campaign_targets
+           SET sent_at = ${params.agora}, wamid = ${wamid}, skipped_reason = NULL
+         WHERE id = ${alvo.id}::uuid AND (sent_at IS NULL OR wamid = ${wamid})
+      `;
+      if (afetadas !== 1) throw new Error('alvo deixou de pertencer a este despacho');
+
+
     });
     enviados += 1;
   }

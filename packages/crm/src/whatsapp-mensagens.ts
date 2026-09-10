@@ -1,4 +1,4 @@
-import { withTenant } from '@barbearia/db';
+import { withTenant, type TransactionClient } from '@barbearia/db';
 import {
   lerPayload,
   montarPayload,
@@ -104,7 +104,7 @@ export async function enviarPeloWhatsApp(
       SELECT id, name, language, status::text AS status, body, buttons
         FROM whatsapp_templates
        WHERE location_id = ${pedido.locationId}::uuid
-         AND status = 'aprovado'
+         AND status = 'aprovado' AND transport = 'meta'
          AND (
            (${pedido.templateId ?? null}::uuid IS NOT NULL AND id = ${pedido.templateId ?? null}::uuid)
            OR (${pedido.templateId ?? null}::uuid IS NULL
@@ -308,14 +308,17 @@ export async function registrarEstadoDaMensagem(params: {
  * Quem mexe na agenda é `packages/scheduling`, pela tarefa. Este arquivo não
  * sabe cancelar horário nenhum, e é de propósito.
  */
-export async function registrarResposta(params: {
+export interface EntradaDaResposta {
   readonly tenantId: string;
   readonly wamid: string;
   readonly telefone: string;
   readonly payload: string | null;
   readonly texto: string | null;
-}): Promise<{ readonly novo: boolean }> {
-  return withTenant(params.tenantId, async (tx) => {
+}
+export async function registrarResposta(params: EntradaDaResposta): Promise<{ readonly novo: boolean }> {
+  return withTenant(params.tenantId, tx => registrarRespostaNaTransacao(tx, params));
+}
+export async function registrarRespostaNaTransacao(tx: TransactionClient, params: EntradaDaResposta): Promise<{ readonly novo: boolean }> {
     const lido = lerPayload(params.payload);
 
     /**
@@ -370,7 +373,6 @@ export async function registrarResposta(params: {
       idempotencyKey: `whatsapp-inbound:${linha.id}`,
     });
     return { novo: true };
-  });
 }
 
 export interface RespostaAExecutar {

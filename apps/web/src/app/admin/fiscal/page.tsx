@@ -19,22 +19,10 @@ import { acaoCancelarNota, acaoSair, acaoSalvarFiscal } from '../acoes';
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { situacaoNfseNaApi } from '@/lib/admin-api';
+import { EmissorNacional } from './emissor-nacional';
 
-/**
- * Nota fiscal (bloco 53, SPEC §3.11).
- *
- * A tela responde duas perguntas em ordem: *"a casa está pronta para emitir?"* e
- * *"o que saiu?"*. O cadastro vem primeiro porque sem ele a lista é sempre
- * vazia — e uma lista vazia sem explicação é o pior estado que uma tela pode
- * ter.
- *
- * ## O que a tela **não** faz
- *
- * Não escolhe regra municipal, não numera RPS, não pergunta por certificado. Se
- * um dia aparecer aqui um campo perguntando como Salvador numera nota, a decisão
- * de arquitetura da SPEC §3.11 já foi perdida — e ela existe para o time manter
- * produto, não integração fiscal.
- */
+/** Cadastro fiscal, certificado e acompanhamento das notas da unidade. */
 
 export const metadata: Metadata = {
   title: 'Nota fiscal',
@@ -63,6 +51,14 @@ const FALHA: Record<string, string> = {
   forbidden: 'Sua conta não mexe no fiscal da casa.',
   invalid_request: 'Confira os dados e tente de novo.',
   request_failed: 'Não deu para salvar. Tente de novo.',
+  nfse_nao_configurada: 'Confira o cadastro do emissor e o certificado desta unidade.',
+  nfse_configuracao_invalida: 'Confira os códigos e a série do emissor nacional.',
+  nfse_certificado_invalido: 'Confira arquivo, senha, CNPJ e validade do certificado A1.',
+  nfse_certificado_tamanho: 'Escolha um arquivo A1 de até 512 KB.',
+  nfse_perfil_nao_atendido: 'O emissor atual atende MEI e Simples com ISS pelo DAS, sem retenção. Este perfil ainda precisa de implementação tributária.',
+  nfse_motivo_invalido: 'O motivo do cancelamento deve ter de 15 a 255 caracteres.',
+  nfse_cancelamento_recusado: 'O emissor recusou o cancelamento. A nota permanece válida.',
+  nfse_cancelamento_pendente: 'O cancelamento aguarda confirmação. O sistema continuará consultando o emissor.',
 };
 
 
@@ -99,6 +95,7 @@ function Nota({ nota, podeEmitir }: { readonly nota: NotaNaTela; readonly podeEm
             {nota.motivoDaRecusa ? (
               <p className="item-cadastro__linha item-cadastro__risco">{nota.motivoDaRecusa}</p>
             ) : null}
+            {nota.avisoOperacional ? <p className="item-cadastro__linha item-cadastro__risco">{nota.avisoOperacional}</p> : null}
             {/* A repartição do Salão-Parceiro só chega para quem tem
                 `commission.view_all` — ela é a comissão do profissional naquela
                 venda. Para a recepção o campo simplesmente não vem. */}
@@ -128,6 +125,7 @@ function Nota({ nota, podeEmitir }: { readonly nota: NotaNaTela; readonly podeEm
               Abrir o PDF
             </a>
           ) : null}
+          {nota.xmlDisponivel ? <a className="ui-button ui-button--ghost" href={`/admin/fiscal/notas/${nota.id}/xml`}>Baixar XML</a> : null}
         </p>
 
         {podeEmitir && nota.estado === 'autorizada' ? (
@@ -142,7 +140,8 @@ function Nota({ nota, podeEmitir }: { readonly nota: NotaNaTela; readonly podeEm
                 <input
                   className="ui-field__input"
                   id={`motivo-${nota.id}`}
-                  minLength={3}
+                  minLength={15}
+                  maxLength={255}
                   name="motivo"
                   placeholder="Valor lançado errado"
                   required
@@ -180,9 +179,10 @@ export default async function FiscalPage({ searchParams }: Props) {
   const hoje = new Date().toISOString().slice(0, 10);
   const trintaDias = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
 
-  const [config, notas] = await Promise.all([
+  const [config, notas, nacional] = await Promise.all([
     podeCadastrar ? configuracaoFiscalNaApi(token) : Promise.resolve(null),
     veLista ? notasNaApi(token, trintaDias, hoje) : Promise.resolve(null),
+    podeCadastrar ? situacaoNfseNaApi(token) : Promise.resolve(null),
   ]);
 
   const erro = first(query['erro']);
@@ -207,11 +207,7 @@ export default async function FiscalPage({ searchParams }: Props) {
   const semEmissor = (
     <div className="ui-alert ui-alert--warning painel__aviso" role="status">
       <strong>A emissão de nota não está ligada nesta instalação.</strong> O cadastro
-      abaixo pode ser preenchido — ele fica guardado —, mas nenhuma nota vai à
-      prefeitura enquanto não houver um emissor contratado e configurado
-      (<code>FISCAL_MODO</code>). Pedir a nota devolve recusa, e é de propósito:
-      nota que fica &ldquo;processando&rdquo; para sempre é pior que nota que não
-      existe.
+      pode ser preenchido e fica guardado para a ativação do emissor próprio.
     </div>
   );
 
@@ -234,8 +230,7 @@ export default async function FiscalPage({ searchParams }: Props) {
 
       <h1 className="painel__titulo">Nota fiscal</h1>
       <p className="painel__sub">
-        A emissão é feita por um emissor contratado — a barbearia cadastra o CNPJ e o regime, e a
-        nota sai sozinha.
+        Configure o fiscal desta unidade e acompanhe as notas emitidas pelas comandas.
       </p>
 
       {emissorDisponivel ? null : semEmissor}
@@ -261,10 +256,19 @@ export default async function FiscalPage({ searchParams }: Props) {
           Nota cancelada na prefeitura.
         </div>
       ) : null}
+      {feito === 'cancelamento-pedido' ? <div className="ui-alert ui-alert--success painel__aviso" role="status">
+        Cancelamento solicitado. A nota continua válida até a confirmação do emissor.
+      </div> : null}
+      {['nfse-configurada', 'certificado-salvo', 'certificado-removido'].includes(feito ?? '') ? (
+        <div className="ui-alert ui-alert--success painel__aviso" role="status">
+          {feito === 'nfse-configurada' ? 'Configuração do emissor salva.' : feito === 'certificado-salvo' ? 'Certificado cadastrado.' : 'Certificado removido desta unidade.'}
+        </div>
+      ) : null}
 
       {podeCadastrar ? (
         <section className="cartao-balcao">
           <h2 className="cartao-balcao__titulo">O fiscal da casa</h2>
+          <details className="dobra" open={!atual}><summary className="dobra__titulo">Dados fiscais da unidade{atual ? ` · ${cnpjBonito(atual.cnpj)}` : ''}</summary>
 
           {!atual ? (
             <p className="painel__nota">
@@ -322,12 +326,12 @@ export default async function FiscalPage({ searchParams }: Props) {
                 </label>
                 <input
                   className="ui-field__input"
-                  defaultValue={atual?.codigoDeServico ?? '14.01'}
+                  defaultValue={atual?.codigoDeServico ?? ''}
                   id="codigoDeServico"
                   name="codigoDeServico"
                   required
                 />
-                <p className="ui-field__hint">Quase toda cidade usa 14.01. O contador confirma.</p>
+                <p className="ui-field__hint">Informe o código municipal confirmado pelo contador.</p>
               </div>
 
               <div className="ui-field">
@@ -396,8 +400,10 @@ export default async function FiscalPage({ searchParams }: Props) {
               Salvar cadastro fiscal
             </button>
           </form>
+          </details>
         </section>
       ) : null}
+      {nacional?.ok && nacional.dados.modo === 'nacional' ? <EmissorNacional situacao={nacional.dados} regime={atual?.regime} /> : null}
 
       {veLista ? (
         <section className="painel__grupo">

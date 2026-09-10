@@ -48,9 +48,9 @@ export async function reservarSubmissaoDeTemplate(params: {
   const claim = randomUUID();
   return withTenant(params.tenantId, async (tx) => {
     const existentes = await tx.$queryRaw<
-      { id: string; meta_id: string | null; submission_state: string }[]
+      { id: string; meta_id: string | null; submission_state: string; transport: string }[]
     >`
-      SELECT id, meta_id, submission_state
+      SELECT id, meta_id, submission_state, transport
         FROM whatsapp_templates
        WHERE location_id = ${params.locationId}::uuid
          AND name = ${params.nome}
@@ -58,6 +58,7 @@ export async function reservarSubmissaoDeTemplate(params: {
        FOR UPDATE
     `;
     const existente = existentes[0] ?? null;
+    if (existente && existente.transport !== 'meta') recusar('template_nao_encontrado');
     if (existente && existente.submission_state !== 'idle') {
       recusar('template_em_processamento');
     }

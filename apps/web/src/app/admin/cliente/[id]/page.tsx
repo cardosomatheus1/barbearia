@@ -135,7 +135,7 @@ const FALHA: Record<string, string> = {
   // de consentimento, teto e janela de silêncio, e o motivo vem logo abaixo.
   nao_saiu: 'A mensagem não saiu.',
   sem_canal: 'O WhatsApp da casa ainda não está ligado, então nada chega ao cliente.',
-  sem_texto_aprovado: 'Não há texto aprovado para este aviso.',
+  sem_texto_aprovado: 'Não há mensagem disponível para este aviso.',
   tipo_invalido: 'Este texto fala de um horário marcado e não serve para mensagem avulsa.',
   confirmacao_invalida: 'Para apagar, digite APAGAR no campo de confirmação.',
   forbidden_anonimizar: 'Sua conta não apaga dados de cliente.',
@@ -569,7 +569,7 @@ export default async function FichaPage({ params, searchParams }: Props) {
              * aprovados lia que não tinha nenhum. A pergunta do tipo ficou onde
              * ela é feita, e esta lista voltou a significar o que o nome diz.
              */
-            .filter((t) => t.estado === 'aprovado')
+            .filter((t) => t.disponivel)
             .map((t) => ({ id: t.id, tipo: t.tipo, titulo: t.titulo, corpo: t.corpo }))}
         />
       ) : null}

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withTenant } from '@barbearia/db';
 import { MINUTOS_DE_JANELA_EXCLUSIVA } from '@barbearia/core';
 import { createAppointment } from './booking.js';
@@ -57,7 +57,9 @@ describeIfDb('oferta de vaga com janela exclusiva', () => {
     await admin?.$disconnect();
   });
 
+  afterEach(()=>vi.unstubAllEnvs());
   beforeEach(async () => {
+    vi.stubEnv('WHATSAPP_TOKEN_KEY',Buffer.alloc(32,47).toString('base64'));
     await admin.$executeRawUnsafe('TRUNCATE tenants CASCADE');
     await exec(`
       INSERT INTO tenants (id, name) VALUES ('${TENANT}', 'Domari');
@@ -169,17 +171,20 @@ describeIfDb('oferta de vaga com janela exclusiva', () => {
     expect(segurados[0]?.expires_at.getTime()).toBe(oferta?.venceEm.getTime());
   });
 
-  it('o token vai em claro uma vez e só o hash fica gravado', async () => {
+  it('o token é autenticado por hash e recuperado por cifra temporária', async () => {
     // Ele é a credencial que aceita a oferta sem sessão. Em claro na tabela,
     // quem a lesse marcaria o horário de qualquer pessoa.
     await esperar(CARLOS);
     const oferta = await oferecer();
 
     const linhas = await withTenant(TENANT, (tx) =>
-      tx.$queryRaw<{ token_hash: string }[]>`SELECT token_hash FROM waitlist_offers`,
+      tx.$queryRaw<{ token_hash: string; delivery_token_cipher:string }[]>`SELECT token_hash,delivery_token_cipher FROM waitlist_offers`,
     );
     expect(linhas[0]?.token_hash).not.toBe(oferta?.token);
     expect(linhas[0]?.token_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(linhas[0]?.delivery_token_cipher).toBeTruthy();
+    expect(linhas[0]?.delivery_token_cipher).not.toContain(oferta!.token);
+    expect((await oferecer())?.token).toBe(oferta!.token);
   });
 
   it('quem já tem oferta viva não recebe uma segunda', async () => {
@@ -208,12 +213,47 @@ describeIfDb('oferta de vaga com janela exclusiva', () => {
     const segunda = await oferecer();
 
     expect(primeira).not.toBeNull();
-    // O Bruno está livre, mas a **vaga** já tem dono por dez minutos.
-    expect(segunda).toBeNull();
+    // O retry recupera a mesma oferta e o mesmo link, sem criar hold nem
+    // oferecer ao Bruno. O ledger de entrega evita mandar duas mensagens.
+    expect(segunda?.id).toBe(primeira?.id);
+    expect(segunda?.token).toBe(primeira?.token);
     expect(await holds()).toHaveLength(1);
   });
 
   // -- a ordem por prioridade --------------------------------------------------
+
+  it('dois workers recuperam o mesmo link e existe um único vencimento na fila',async()=>{
+    await esperar(CARLOS);
+    const [a,b]=await Promise.all([oferecer(),oferecer()]);
+    expect(a?.id).toBe(b?.id);expect(a?.token).toBe(b?.token);
+    const tarefas=await withTenant(TENANT,tx=>tx.$queryRaw`SELECT id FROM jobs WHERE kind='espera.vencer'`);
+    expect(tarefas).toHaveLength(1);expect(await holds()).toHaveLength(1);
+  });
+  it('retomada não entrega oferta quando o profissional foi desativado', async () => {
+    await esperar(CARLOS);
+    expect(await oferecer()).not.toBeNull();
+    await admin.$executeRaw`UPDATE professionals SET active=false WHERE id=${RUAN}::uuid`;
+    expect(await oferecer()).toBeNull();
+    expect(await holds()).toHaveLength(1);
+  });
+  it('vencimento apaga a cifra e grava a próxima rodada na mesma transação, uma única vez',async()=>{
+    await esperar(CARLOS);await esperar(BRUNO);const oferta=await oferecer();
+    const depois=new Date(oferta!.venceEm.getTime()+1000);
+    await vencerOfertas(TENANT,depois);await vencerOfertas(TENANT,depois);
+    const [linha]=await withTenant(TENANT,tx=>tx.$queryRaw<{delivery_token_cipher:string|null}[]>`
+      SELECT delivery_token_cipher FROM waitlist_offers WHERE id=${oferta!.id}::uuid`);
+    expect(linha?.delivery_token_cipher).toBeNull();
+    const fila=await withTenant(TENANT,tx=>tx.$queryRaw`SELECT id FROM jobs WHERE kind='espera.oferecer'`);
+    expect(fila).toHaveLength(1);
+    // O próprio banco conserva os candidatos já tentados, mesmo sem exceto no payload.
+    expect((await oferecer(depois))?.customerId).toBe(BRUNO);
+  });
+  it('sem chave de cifragem nenhuma oferta ou hold fica commitado',async()=>{
+    await esperar(CARLOS);vi.stubEnv('WHATSAPP_TOKEN_KEY','');
+    await expect(oferecer()).rejects.toThrow('WHATSAPP_TOKEN_KEY');
+    expect(await holds()).toHaveLength(0);
+    expect(await withTenant(TENANT,tx=>tx.$queryRaw`SELECT id FROM waitlist_offers`)).toHaveLength(0);
+  });
 
   it('quem pediu a janela mais justa recebe primeiro, mesmo entrando depois', async () => {
     /**

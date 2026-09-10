@@ -103,6 +103,12 @@ describeIfDb('automação', () => {
    * A campanha fechou essa lista no bloco 82; a automação ficou de fora, com o
    * mesmo seletor e a mesma consequência.
    */
+  it.each(['aniversario','assinatura_vencendo'] as const)('%s pode ser cadastrado para o próprio dia', async gatilho => {
+    const criada = await automacao({ gatilho,limiar:0 });
+    expect(await admin.$queryRaw`SELECT threshold FROM automations WHERE id=${criada.id}::uuid`).toEqual([{ threshold:0 }]);
+    await expect(admin.$executeRaw`UPDATE automations SET trigger='sem_retorno' WHERE id=${criada.id}::uuid`).rejects.toThrow();
+  });
+
   it('automação recusa texto que não é de campanha', async () => {
     await expect(automacao({ tipo: 'lembrete_24h' })).rejects.toMatchObject({ code: 'invalida' });
     await expect(automacao({ tipo: 'senha_de_acesso' })).rejects.toMatchObject({

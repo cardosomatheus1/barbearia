@@ -115,16 +115,17 @@ describeIfDb('os números do barbeiro', () => {
     readonly customerId?: string;
     readonly professionalId?: string;
     readonly status?: string;
+    readonly criadoEm?: string;
   }): Promise<void> {
     const fim = new Date(new Date(params.quando).getTime() + 30 * 60_000).toISOString();
     await exec(admin, `
       INSERT INTO appointments
         (id, tenant_id, location_id, customer_id, professional_id,
-         starts_at, ends_at, service_starts_at, service_ends_at, price_cents, status)
+         starts_at, ends_at, service_starts_at, service_ends_at, price_cents, status, created_at)
       VALUES ('${params.id}', '${TENANT}', '${LOCATION}',
               '${params.customerId ?? CARLOS}', '${params.professionalId ?? RUAN}',
               '${params.quando}', '${fim}', '${params.quando}', '${fim}',
-              4000, '${params.status ?? 'completed'}')
+              4000, '${params.status ?? 'completed'}', '${params.criadoEm ?? params.quando}')
     `);
   }
 
@@ -207,6 +208,7 @@ describeIfDb('os números do barbeiro', () => {
     await atendeu({
       id: 'f0000000-0000-0000-0000-000000000012',
       quando: '2026-10-05T14:00:00Z',
+      criadoEm: '2026-09-05T14:15:00Z',
       status: 'confirmed',
     });
     // E um segundo cliente que foi embora sem remarcar.
@@ -242,6 +244,7 @@ describeIfDb('os números do barbeiro', () => {
     await atendeu({
       id: 'f0000000-0000-0000-0000-000000000032',
       quando: '2026-10-05T14:00:00Z',
+      criadoEm: '2026-09-05T14:15:00Z',
       status: 'cancelled_customer',
     });
 
@@ -262,6 +265,7 @@ describeIfDb('os números do barbeiro', () => {
     await atendeu({
       id: 'f0000000-0000-0000-0000-000000000042',
       quando: '2026-10-05T14:00:00Z',
+      criadoEm: '2026-09-05T14:15:00Z',
       status: 'confirmed',
     });
     const semCadastro = 'f0000000-0000-0000-0000-000000000043';

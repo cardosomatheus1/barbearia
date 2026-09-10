@@ -1,48 +1,20 @@
-import { execFileSync } from 'node:child_process';
-import { readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFile, execFileSync } from 'node:child_process';
+import { cpSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
+import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-/**
- * As migrações, **aplicadas duas vezes**.
- *
- * ## O defeito que este arquivo existe para não deixar voltar
- *
- * `deploy/compose.yml` aplicava as migrações assim, e `migrate.sh` e o
- * `test.sh` tinham cópias da mesma ideia:
- *
- *     for m in packages/db/migrations/*.sql; do psql ... -f "$m"; done
- *
- * Todas, sempre, sem registrar nenhuma. Na primeira subida funciona. Na segunda
- * — que é **toda atualização**, porque `preparar` roda a cada `docker compose
- * up` — o `0001` reencontra o que ele mesmo criou e morre em
- * `CREATE TYPE professional_kind ... já existe`, com saída 3.
- *
- * E o estrago não para no container que falhou. `api`, `worker` e `web` esperam
- * `preparar` com `condition: service_completed_successfully`; o compose aborta a
- * subida inteira e **não sobe o Caddy**. O sintoma em produção é o site fora do
- * ar, na porta 443 recusando conexão, depois de um comando que era só para
- * atualizar. Foi exatamente o que aconteceu na primeira instalação de verdade.
- *
- * ## O livro-caixa, e por que ele tem uma baseline
- *
- * O conserto é registrar o que já foi aplicado, em `schema_migrations`. Só que
- * os bancos que já existem lá fora não têm esse registro, e um livro vazio faria
- * o script achar que **nada** foi aplicado — reaplicando tudo e reproduzindo o
- * mesmo erro que ele veio consertar.
- *
- * Daí a adoção: banco com schema e sem livro é banco anterior ao livro, e as
- * migrações até a baseline entram como aplicadas sem rodar. A baseline é um
- * nome de arquivo escrito, e não "todas": um banco adotado precisa continuar
- * recebendo o que veio **depois** dele. Marcar tudo faria a migração seguinte
- * ser pulada em silêncio, que é a única falha pior que a que estamos
- * consertando — ela só aparece quando a aplicação lê a coluna que não existe.
- */
-
+/** Migração limpa, retomada segura, concorrência e adoção explícita de legado. */
 const ADMIN = process.env.ADMIN_DATABASE_URL;
 const RAIZ_DB = join(import.meta.dirname, '..');
-const MIGRATE = join(RAIZ_DB, 'scripts', 'migrate.sh');
-const PASTA_MIGRACOES = join(RAIZ_DB, 'migrations');
+// Fixtures de migração nunca entram na pasta que as demais suítes percorrem.
+const FIXTURE = mkdtempSync(join(tmpdir(), 'migracoes-test-'));
+cpSync(join(RAIZ_DB, 'migrations'), join(FIXTURE, 'migrations'), { recursive: true });
+cpSync(join(RAIZ_DB, 'scripts'), join(FIXTURE, 'scripts'), { recursive: true });
+symlinkSync(join(RAIZ_DB, 'node_modules'), join(FIXTURE, 'node_modules'), 'dir');
+const MIGRATE = join(FIXTURE, 'scripts', 'migrate.sh');
+const PASTA_MIGRACOES = join(FIXTURE, 'migrations');
 /** As migrações dão `GRANT` ao role da aplicação: sem ele, nem a primeira roda. */
 const BOOTSTRAP = join(import.meta.dirname, '..', '..', '..', 'scripts', 'bootstrap-role.sh');
 
@@ -64,10 +36,10 @@ function bancoLimpo(nome) {
   return `${BASE}/${nome}`;
 }
 
-function migrar(url) {
+function migrar(url, extras = {}) {
   return execFileSync('bash', [MIGRATE], {
     encoding: 'utf8',
-    env: { ...process.env, DATABASE_URL: url },
+    env: { ...process.env, DATABASE_URL: url, ...extras },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -108,7 +80,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
   }, 300_000);
 
   afterAll(() => {
-    rmSync(POSTERIOR, { force: true });
+    rmSync(FIXTURE, { recursive: true, force: true });
     for (const nome of BANCOS) {
       try {
         psql(ADMIN, `DROP DATABASE IF EXISTS ${nome} WITH (FORCE)`);
@@ -171,7 +143,8 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
       const url = banco('livro_caixa_adocao');
       lacoIngenuo(url);
 
-      const saida = migrar(url);
+      expect(() => migrar(url)).toThrow();
+      const saida = migrar(url, { MIGRATION_ADOPT_THROUGH: arquivosDeMigracao().at(-1) });
 
       expect(saida).toContain('adotado');
       const registradas = Number(psql(url, 'SELECT count(*) FROM schema_migrations'));
@@ -181,7 +154,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
   );
 
   it(
-    'no banco adotado, a migração posterior à baseline ainda é aplicada',
+    'depois da adoção validada, uma migração nova ainda é aplicada',
     () => {
       /**
        * A metade perigosa da adoção. Marcar **tudo** como aplicado deixaria a
@@ -191,6 +164,7 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
       const url = banco('livro_caixa_posterior');
       lacoIngenuo(url);
 
+      migrar(url, { MIGRATION_ADOPT_THROUGH: arquivosDeMigracao().at(-1) });
       writeFileSync(POSTERIOR, 'CREATE TABLE IF NOT EXISTS teste_do_livro_caixa (id integer PRIMARY KEY);\n');
       migrar(url);
 
@@ -225,4 +199,48 @@ describe.skipIf(!ADMIN)('as migrações aplicadas duas vezes', () => {
     },
     300_000,
   );
+  it('primeira migração sem journal nunca é confundida com 83 migrações aplicadas', () => {
+    const url = banco('livro_caixa_interrompido');
+    execFileSync('psql', [url, '-X', '-v', 'ON_ERROR_STOP=1', '-f', join(PASTA_MIGRACOES, arquivosDeMigracao()[0])], { stdio: 'pipe' });
+    expect(() => migrar(url)).toThrow();
+    expect(psql(url, "SELECT to_regclass('public.schema_migrations') IS NULL")).toBe('t');
+    expect(() => migrar(url, { MIGRATION_ADOPT_THROUGH: '0083_recurso_fiscal.sql' })).toThrow();
+    expect(psql(url, 'SELECT count(*) FROM schema_migrations')).toBe('0');
+  }, 300_000);
+
+  it('checksum alterado e tentativa interrompida impedem uma nova aplicação', () => {
+    const url = banco('livro_caixa_checksum');
+    migrar(url);
+    psql(url, "UPDATE schema_migrations SET sha256='alterado' WHERE nome=(SELECT min(nome) FROM schema_migrations)");
+    expect(() => migrar(url)).toThrow();
+    psql(url, "INSERT INTO schema_migration_attempts (nome, sha256) VALUES ('interrompida', 'abc')");
+    expect(() => migrar(url)).toThrow();
+    expect(psql(url, 'SELECT count(*) FROM schema_migration_attempts')).toBe('1');
+    expect(psql(url, "SELECT has_table_privilege('barbearia_app','schema_migrations','UPDATE')")).toBe('f');
+  }, 300_000);
+
+  it('dois migradores simultâneos aplicam cada arquivo uma única vez', async () => {
+    const url = banco('livro_caixa_concorrencia');
+    const executar = () => promisify(execFile)('bash', [MIGRATE], {
+      env: { ...process.env, DATABASE_URL: url }, maxBuffer: 8 * 1024 * 1024,
+    });
+    const resultados = await Promise.all([executar(), executar()]);
+    expect(resultados.filter((r) => r.stdout.includes('nada a aplicar'))).toHaveLength(1);
+    expect(Number(psql(url, 'SELECT count(*) FROM schema_migrations'))).toBe(arquivosDeMigracao().length);
+  }, 300_000);
+
+  it('falha SQL deixa tentativa registrada, reverte o DDL e impede reaplicação silenciosa', () => {
+    const url = banco('livro_caixa_falha_sql');
+    migrar(url);
+    const arquivo = join(PASTA_MIGRACOES, '9999_zz_falha_sql.sql');
+    try {
+      writeFileSync(arquivo, 'CREATE TABLE prova_rollback_migracao (id int); SELECT 1/0;');
+      expect(() => migrar(url)).toThrow();
+      expect(psql(url, "SELECT to_regclass('prova_rollback_migracao') IS NULL")).toBe('t');
+      expect(psql(url, "SELECT count(*) FROM schema_migration_attempts WHERE nome='9999_zz_falha_sql.sql'")).toBe('1');
+      expect(() => migrar(url)).toThrow();
+      expect(psql(url, "SELECT count(*) FROM schema_migrations WHERE nome='9999_zz_falha_sql.sql'")).toBe('0');
+    } finally { rmSync(arquivo, { force: true }); }
+  }, 300_000);
+
 });

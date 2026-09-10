@@ -233,10 +233,10 @@ function CamposDoServico({
           ser lida.
         */}
         <div className="ui-field">
-          <label className="ui-field__label" htmlFor="comboToleranceMinutes">
+          <label className="ui-field__label" htmlFor={`${prefixo}-comboToleranceMinutes`}>
             Ganho ao fazer na sequência (min)
           </label>
-          <input className="ui-field__input" id="comboToleranceMinutes" inputMode="numeric"
+          <input className="ui-field__input" id={`${prefixo}-comboToleranceMinutes`} inputMode="numeric"
                  max={60} min={0} name="comboToleranceMinutes" type="number"
                  defaultValue={servico?.comboToleranceMinutes ?? 0} />
           <p className="ui-field__hint">

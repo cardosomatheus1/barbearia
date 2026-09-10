@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { semTenant } from '@barbearia/db';
 import { registrarNaTrilha } from './plataforma.js';
+import { cobrarComReserva } from './cobranca-reserva.js';
 import type { CobrancaProvider, ResultadoDaCobranca } from './cobranca.js';
 
 /**
@@ -94,6 +95,8 @@ export interface PspProvider {
   cobrar(pedido: PedidoDeCobranca): Promise<RespostaDaCobranca>;
   /** Pergunta o estado de uma cobrança. É a rede de segurança, não o caminho. */
   consultar(chargeId: string): Promise<EstadoDaCobranca>;
+  /** Recupera tentativa antiga sem criar outro débito. Busca vazia mantém a reserva. */
+  recuperar?(pedido: PedidoDeCobranca): Promise<RespostaDaCobranca | null>;
   estornar(pedido: PedidoDeEstorno): Promise<{ readonly refundId: string }>;
 }
 
@@ -199,34 +202,9 @@ export class PspCobrancaProvider implements CobrancaProvider {
     readonly valorCents: number;
     readonly tentativa: number;
   }): Promise<ResultadoDaCobranca> {
-    const conta = await meioDePagamento(pedido.tenantId);
-    if (!conta || !conta.pspMethodId) {
-      return { pago: false, motivo: 'sem meio de pagamento cadastrado' };
-    }
+    const resposta = await cobrarComReserva(pedido, this.psp);
 
-    const resposta = await this.psp.cobrar({
-      tenantId: pedido.tenantId,
-      faturaId: pedido.faturaId,
-      valorCents: pedido.valorCents,
-      tentativa: pedido.tentativa,
-      pspCustomerId: conta.pspCustomerId,
-      pspMethodId: conta.pspMethodId,
-    });
-
-    /**
-     * Só amarra quando há o que amarrar.
-     *
-     * Sem a guarda, uma recusa que volta sem id do adquirente grava string
-     * vazia em `psp_charge_id` — e o `AND psp_charge_id IS NULL` do `UPDATE`
-     * faz disso um caminho **sem volta**: nenhuma tentativa posterior consegue
-     * amarrar a cobrança que der certo. O webhook dela chega, procura a fatura
-     * pelo id da cobrança, não encontra ninguém, e a barbearia é suspensa por
-     * uma fatura que pagou. O `FakePspProvider` escondia isso porque devolvia
-     * um id de mentira até quando recusava.
-     */
-    if (resposta.chargeId) await amarrarCobranca(pedido.faturaId, resposta.chargeId);
-
-    if (resposta.estado === 'paga') return { pago: true, metodo: 'card' };
+    if (resposta.estado === 'paga') return { pago: true, metodo: 'card', chargeId: resposta.chargeId };
     /**
      * Pendente **não** é recusa, e a diferença custa uma suspensão.
      *
@@ -325,22 +303,6 @@ export async function salvarMeioDePagamento(entrada: {
       bandeira: entrada.bandeira ?? null,
       final: entrada.final ?? null,
     });
-  });
-}
-
-/**
- * Amarra a cobrança do adquirente à fatura.
- *
- * `ON CONFLICT DO NOTHING` no índice único: uma segunda tentativa que gerasse
- * cobrança nova não pode roubar a amarração da primeira, senão o webhook da
- * primeira chegaria sem dono e o dinheiro ficaria sem fatura.
- */
-async function amarrarCobranca(faturaId: string, chargeId: string): Promise<void> {
-  await semTenant(async (tx) => {
-    await tx.$executeRaw`
-      UPDATE invoices SET psp_charge_id = ${chargeId}, updated_at = now()
-       WHERE id = ${faturaId}::uuid AND psp_charge_id IS NULL
-    `;
   });
 }
 

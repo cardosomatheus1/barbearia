@@ -4,7 +4,8 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getPrisma } from '@barbearia/db';
 import { HealthController, estadoDePronto } from '../src/common/health.controller.js';
 import { HttpExceptionFilter } from '../src/common/http-exception.filter.js';
 import { FORA_DO_LIMITE as FORA_DO_LIMITE_IMPORTADO } from '../src/common/throttler.config.js';
@@ -85,6 +86,24 @@ describe('sondas de saúde', () => {
 
     expect(caiu).toMatchObject({ status: 'degradado', banco: 'inacessivel', rls: 'desconhecida' });
   });
+
+  it.skipIf(!process.env['DATABASE_URL'])(
+    'a HTTP retorna 503 ao perder banco ou RLS, enquanto a sonda de vivo continua 200', async () => {
+      // A prova é do status HTTP e do filtro Nest; falhas do banco são
+      // injetadas sem alterar o role compartilhado por outras suítes.
+      const consulta = vi.spyOn(getPrisma(), '$queryRaw');
+      try {
+        consulta.mockRejectedValueOnce(new Error('falha privada de conexão'));
+        const indisponivel = await request(app.getHttpServer()).get('/health/pronto');
+        expect(indisponivel.status).toBe(503);
+        expect(JSON.stringify(indisponivel.body)).not.toContain('falha privada');
+        consulta.mockResolvedValueOnce([{ bypass_rls: true }]);
+        expect((await request(app.getHttpServer()).get('/health/pronto')).status).toBe(503);
+        expect((await request(app.getHttpServer()).get('/health')).status).toBe(200);
+        expect(consulta).toHaveBeenCalledTimes(2);
+      } finally { consulta.mockRestore(); }
+    },
+  );
 
   it('role que ignora RLS é degradado mesmo com o banco respondendo', async () => {
     // O caso que `main.ts` já recusa na partida — mas um `ALTER ROLE ...

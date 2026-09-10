@@ -38,6 +38,9 @@ import {
 } from '../acoes';
 import { secao } from '../secoes';
 import { FalhaDaLeitura } from '../falha-da-leitura';
+import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
+import { ConexaoWhatsApp } from './conexao';
+import { TextosBaileys } from './textos-baileys';
 
 /**
  * O WhatsApp da casa (bloco 55, SPEC §4.12).
@@ -113,6 +116,9 @@ const FALHA: Record<string, string> = {
    */
   request_failed:
     'Não deu para salvar. Se repetir, não é a sua conexão: o motivo fica no registro do servidor, e quem instalou o sistema consegue lê-lo.',
+  baileys_texto_invalido: 'Confira o título, o texto e as variáveis disponíveis para este aviso.',
+  baileys_tipo_do_texto: 'Crie outra mensagem para mudar a finalidade.',
+  baileys_texto_ausente: 'Esta mensagem não está disponível. Atualize a página.',
 };
 
 /**
@@ -459,12 +465,13 @@ export default async function WhatsAppPage({ searchParams }: Props) {
    * é dela** — o token de outra pessoa ficaria cifrado no nosso banco com a
    * tela dizendo que está tudo certo.
    */
-  const [cadastroResposta, templatesResposta, signupResposta] = await Promise.all([
+  const [cadastroResposta, templatesResposta, signupResposta, conexaoResposta] = await Promise.all([
     cadastroDoWhatsAppNaApi(token),
     templatesDoWhatsAppNaApi(token),
     // Só o modo: quem sorteia o `state` e monta o endereço é a ação do botão,
     // porque cookie não se grava durante a renderização.
     signupDoWhatsAppNaApi(token),
+    conexaoWhatsAppNaApi(token),
   ]);
 
   /**
@@ -494,7 +501,8 @@ export default async function WhatsAppPage({ searchParams }: Props) {
   }
 
   const cadastro = cadastroResposta.ok ? cadastroResposta.dados.cadastro : null;
-  const templates = templatesResposta.ok ? templatesResposta.dados.templates : [];
+  const todosTextos = templatesResposta.ok ? templatesResposta.dados.templates : [];
+  const templates = todosTextos.filter(t => t.canal !== 'baileys');
   // `null` quando o app da plataforma não foi configurado: aí a tela não
   // desenha o botão, porque botão que abre janela vazia é pior que botão nenhum.
   const signup = signupResposta.ok ? signupResposta.dados.signup : null;
@@ -520,8 +528,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
 
       <h1 className="painel__titulo">WhatsApp</h1>
       <p className="painel__sub">
-        Os avisos saem pelo número da própria barbearia, conectado direto na Meta. É o número
-        que o cliente já tem na agenda.
+        Conecte o número da barbearia e organize os avisos aos clientes.
       </p>
 
       {falha ? (
@@ -545,6 +552,13 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           {oQueFazer ? <p className="whatsapp__caminho">{oQueFazer}</p> : null}
         </div>
       ) : null}
+      {conexaoResposta.ok ? <ConexaoWhatsApp inicial={conexaoResposta.dados} /> :
+        <FalhaDaLeitura code={conexaoResposta.code} href="/admin/whatsapp" oque="a conexão do WhatsApp" />}
+      {conexaoResposta.ok && conexaoResposta.dados.canal === 'baileys' ? <>
+        {feito === 'texto-local' ? <p className="ui-alert ui-alert--success" role="status">Mensagem salva.</p> : null}
+        {templatesResposta.ok ? <TextosBaileys mensagens={todosTextos.filter(t => t.canal === 'baileys')} /> :
+          <FalhaDaLeitura code={templatesResposta.code} href="/admin/whatsapp" oque="as mensagens" />}
+      </> : conexaoResposta.ok ? <>
       <Caminho
         aprovados={templates.filter((t) => t.estado === 'aprovado').length}
         conectado={atual === 'ativo'}
@@ -877,6 +891,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
           </details>
         ) : null}
       </section>
+      </> : null}
     </main>
   );
 }

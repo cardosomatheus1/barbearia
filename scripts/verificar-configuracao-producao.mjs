@@ -15,10 +15,18 @@ export function errosDaConfiguracaoDeProducao(env = process.env) {
   const fiscal = valor(env, 'FISCAL_MODO') || 'nenhum';
   const midia = valor(env, 'MEDIA_STORAGE') || 'local';
   const whatsapp = valor(env, 'WHATSAPP_MODO') || 'nenhum';
+  const baileys = valor(env, 'BAILEYS_HABILITADO') || '0';
+  if (!['0', '1'].includes(baileys)) erros.push('BAILEYS_HABILITADO deve ser 0 ou 1');
+  if (baileys === '1') {
+    const chave = valor(env, 'WHATSAPP_TOKEN_KEY');
+    if (!/^[A-Za-z0-9+/]{43}=$/.test(chave) || Buffer.from(chave, 'base64').length !== 32 || Buffer.from(chave, 'base64').toString('base64') !== chave) {
+      erros.push('BAILEYS_HABILITADO=1 exige WHATSAPP_TOKEN_KEY com 32 bytes em base64');
+    }
+  }
   const onboarding = valor(env, 'WHATSAPP_ONBOARDING') || 'padrao';
   const identityMessaging = valor(env, 'IDENTITY_MESSAGING_MODO') || 'console';
 
-  for (const nome of ['STAFF_EMAIL_PEPPER', 'OTP_PEPPER', 'API_KEY_PEPPER']) {
+  for (const nome of ['STAFF_EMAIL_PEPPER', 'OTP_PEPPER', 'API_KEY_PEPPER', 'INTERNAL_PROXY_SECRET']) {
     const segredo = valor(env, nome);
     if (segredo.length < 32) erros.push(`${nome} precisa ter pelo menos 32 caracteres`);
   }
@@ -37,16 +45,25 @@ export function errosDaConfiguracaoDeProducao(env = process.env) {
 
   if (!['nenhum', 'fake', 'stripe'].includes(psp)) erros.push(`PSP_MODO inválido: ${psp}`);
   if (psp === 'fake') erros.push('PSP_MODO=fake é proibido em produção');
+  const comanda = valor(env, 'COMANDA_PSP_MODO') || 'nenhum';
+  if (comanda !== 'nenhum') erros.push('COMANDA_PSP_MODO deve ser nenhum em produção; Stripe cobra somente a assinatura do SaaS');
   if (psp === 'stripe') {
     const chave = valor(env, 'STRIPE_SECRET_KEY');
     const webhook = valor(env, 'STRIPE_WEBHOOK_SECRET');
     if (!chave) erros.push('PSP_MODO=stripe exige STRIPE_SECRET_KEY');
+    if (!/^pk_live_[A-Za-z0-9]+$/.test(valor(env, 'STRIPE_PUBLISHABLE_KEY'))) erros.push('PSP_MODO=stripe exige STRIPE_PUBLISHABLE_KEY de produção');
     if (!webhook) erros.push('PSP_MODO=stripe exige STRIPE_WEBHOOK_SECRET');
     if (/^(?:sk|rk)_test_/i.test(chave)) erros.push('STRIPE_SECRET_KEY de teste é proibida em produção');
   }
 
-  if (!['nenhum', 'fake'].includes(fiscal)) erros.push(`FISCAL_MODO inválido: ${fiscal}`);
+  if (!['nenhum', 'fake', 'nacional'].includes(fiscal)) erros.push(`FISCAL_MODO inválido: ${fiscal}`);
   if (fiscal === 'fake') erros.push('FISCAL_MODO=fake é proibido em produção');
+  if (fiscal === 'nacional') {
+    const chave = valor(env, 'FISCAL_SECRET_KEY');
+    if (!/^[A-Za-z0-9+/]{43}=$/.test(chave) || Buffer.from(chave, 'base64').length !== 32 || Buffer.from(chave, 'base64').toString('base64') !== chave) {
+      erros.push('FISCAL_MODO=nacional exige FISCAL_SECRET_KEY com 32 bytes em base64');
+    }
+  }
 
   if (!['local', 's3'].includes(midia)) erros.push(`MEDIA_STORAGE inválido: ${midia}`);
   if (midia === 's3') {

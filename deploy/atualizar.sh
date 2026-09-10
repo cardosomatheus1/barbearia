@@ -30,15 +30,27 @@ titulo() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 morrer() { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 
 cd "$DESTINO"
+# Conserva a sonda do procedimento mesmo ao fazer checkout de uma versão antiga.
+VALIDADOR="$(mktemp --suffix=.mjs)"
+cp "$DESTINO/deploy/verificar-prontidao.mjs" "$VALIDADOR"
+trap 'rm -f "$VALIDADOR"' EXIT
 
 titulo "a versão de agora, para poder voltar"
 ANTERIOR="$(git rev-parse HEAD)"
-echo "$ANTERIOR" > "$DESTINO/.versao-anterior"
 verde "  $(git rev-parse --short "$ANTERIOR")"
 
 titulo "código novo"
 git fetch --quiet origin "$BRANCH"
-git reset --hard --quiet "origin/$BRANCH"
+ALVO="${DEPLOY_SHA:-$(git rev-parse "origin/$BRANCH")}"
+[[ "$ALVO" =~ ^[a-f0-9]{40}$ ]] || morrer "SHA de deploy inválido"
+git cat-file -e "$ALVO^{commit}" || morrer "SHA aprovado não está no checkout"
+if ! node "$DESTINO/deploy/verificar-esteira.mjs" "$ALVO" "$BRANCH"; then
+  echo "o portão não aprovou o SHA; implantação não iniciada" >&2
+  exit 78
+fi
+echo "$ANTERIOR" > "$DESTINO/.versao-anterior"
+git reset --hard --quiet "$ALVO"
+export APP_VERSION="$ALVO"
 verde "  $(git rev-parse --short HEAD)"
 
 titulo "segredos que a versão nova exige"
@@ -63,6 +75,7 @@ fi
 
 titulo "construindo"
 $COMPOSE build
+$COMPOSE run --rm --no-deps validar
 
 # O backup vem **depois** de buscar e construir, e antes de migrar.
 #
@@ -86,12 +99,14 @@ $COMPOSE run --rm preparar || morrer "migração falhou. A versão anterior cont
 
 titulo "subindo"
 $COMPOSE up -d --no-deps api worker web
+$COMPOSE up -d --no-deps --force-recreate caddy
 
 DOMINIO_NO_ENV="$(grep -E '^DOMINIO=' .env | cut -d= -f2 | tr -d '"' || true)"
 titulo "conferindo"
 for i in $(seq 1 30); do
-  if curl -fsS --max-time 5 "https://$DOMINIO_NO_ENV/" > /dev/null 2>&1; then
-    verde "  ok  o site responde"
+  if node "$VALIDADOR" "$APP_VERSION" > /dev/null 2>&1 \
+    && curl -fsS --max-time 5 "https://$DOMINIO_NO_ENV/" > /dev/null 2>&1; then
+    verde "  ok  API, banco, RLS, worker e web respondem na versão esperada"
     exit 0
   fi
   sleep 4

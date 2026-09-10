@@ -1,0 +1,10 @@
+{
+  "name": "backup-cifrado-final",
+  "command": [
+    "python3",
+    "output/prova_backup_cifrado.py"
+  ],
+  "started_utc": "2026-09-10T06:49:49.298934+00:00",
+  "duration_seconds": 22.24,
+  "exit_code": 0
+}

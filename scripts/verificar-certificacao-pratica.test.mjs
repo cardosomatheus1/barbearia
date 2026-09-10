@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 
 const raiz = process.cwd();
 const arquivos = [
+  'scripts/head-auditado.mjs',
   'scripts/medicao.sh',
   'scripts/carga-concorrencia-reserva.mjs',
   '.github/workflows/portao.yml',
@@ -30,6 +31,14 @@ function preparar() {
   }
   return tmp;
 }
+
+test('baseline íntegro passa com todas as dependências da guarda', () => {
+  const tmp=preparar();
+  try {
+    const r=spawnSync(process.execPath,['scripts/verificar-certificacao-pratica.mjs'],{cwd:tmp,encoding:'utf8'});
+    assert.equal(r.status,0,r.stdout+'\n'+r.stderr);
+  } finally { fs.rmSync(tmp,{recursive:true,force:true}); }
+});
 
 function mutacao(relativo, de, para) {
   const tmp = preparar();
@@ -94,8 +103,8 @@ test('detecta documentação voltando a uma contagem antiga de migrações', () 
 
 test('detecta promessa falsa de provider fiscal/split', () => mutacao(
   'docs/go-live.md',
-  'Fiscal e split\nnão possuem provider real',
-  'Fiscal e split\nestão prontos em produção',
+  'sem homologação externa nem cobertura universal',
+  'homologado para todos os municípios',
 ));
 
 test('detecta guarda removida do portão', () => mutacao(

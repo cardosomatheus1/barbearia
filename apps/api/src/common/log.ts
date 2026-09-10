@@ -24,10 +24,9 @@ export interface LinhaDeLog {
   /**
    * UUID da barbearia, quando a requisição foi autenticada.
    *
-   * Ausente em rota pública **de propósito**, e sem perda: ali o slug já está
-   * dentro de `rota` (`/v1/b/barbearia-do-ze/availability`), que é justamente o
-   * que agrupa por barbearia. Preencher os dois seria a mesma informação em
-   * duas chaves, e aí nenhuma agrupa direito.
+   * Ausente quando a requisição não resolveu uma barbearia. A rota que chega
+   * do interceptor é o padrão registrado no framework (`/v1/b/:slug/...`),
+   * nunca os parâmetros que vieram do cliente.
    */
   readonly tenantId?: string;
   /** Código de erro do domínio, quando houve. Nunca a mensagem. */

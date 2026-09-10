@@ -1,3 +1,4 @@
+import { marcarWorkerPronto } from './prontidao.js';
 import {
   entregarWebhook,
   expirarDesafiosDeOtp,
@@ -9,19 +10,18 @@ import {
   atribuirObjetivos,
   atribuirReceita,
   despacharCampanha,
-  disparosAEnviar,
-  enviarPeloWhatsApp,
+  enviarNoCanalDaUnidade,
+  RuntimeBaileys,
+  baileysHabilitado,
   executarResposta,
-  confirmarDisparoDaAutomacao,
-  liberarDisparoDaAutomacao,
-  marcarDisparoDaAutomacaoIncerto,
-  reservarDisparoDaAutomacao,
-  conciliarWhatsAppDaUnidade,
+  conciliarWhatsAppDoTenant,
+  conciliarEnviosBaileys,
+  expirarConteudoBaileys,
   entregarTemplateDaFila,
   assinarWabaDaUnidade,
-  provedorDoWhatsApp,
   respostaParaEnviar,
   varrerAutomacoes,
+  despacharAutomacoes,
   varrerPreviewsVencidos,
   varrerRetencao,
   expirarTextoDaRecepcao,
@@ -45,19 +45,16 @@ import {
   vencerOfertas as vencerOfertasDaEspera,
 } from '@barbearia/scheduling';
 import {
-  FakeCobrancaDoClubeProvider,
-  FakeSplitProvider,
-  MINUTOS_DE_JANELA_EXCLUSIVA,
   diaNaUnidade,
-  type CobrancaDoClubeProvider,
   type MotivoDoAvisoDoClube,
-  type SplitProvider,
   type TipoDeNotificacao,
   VARIAVEIS_DO_AVISO,
   WhatsAppDeliveryUnknownError,
 } from '@barbearia/core';
 import {
   avisarDaOperacao,
+  adquirenteDoClube,
+  adquirenteDoSplit,
   CODIGO_DA_RETENCAO,
   ConsoleOperacaoProvider,
   atribuirDaBarbearia,
@@ -67,6 +64,7 @@ import {
 } from '@barbearia/platform';
 import {
   ConsoleNotificationProvider,
+  executarEntregaDuravel,
   RELOGIO_REAL,
   rodarWorker,
   type MensagemDeAgendamento,
@@ -83,7 +81,7 @@ import {
 } from '@barbearia/jobs';
 import { erroSeguro, logWorker } from './log.js';
 
-import { emissorFiscal, enviarNota } from '@barbearia/finance';
+import { emissorFiscal, enviarNota, prepararPdfsNfse } from '@barbearia/finance';
 
 /**
  * O emissor sai de `FISCAL_MODO`, e pode ser **nenhum**.
@@ -122,6 +120,7 @@ import {
   aplicarRegua,
   conciliarPendentes,
   conciliarEstornosPendentes,
+  conciliarCadastrosDeCartao,
   executarAvisoDeCobranca,
   recursoLigado,
   type AssuntoDoAviso,
@@ -180,59 +179,23 @@ function ligarAdquirente(): { psp: PspProvider | null; cobranca: CobrancaProvide
 
 const { psp, cobranca } = ligarAdquirente();
 
-/**
- * O provedor de mensagem do processo, **um só**.
- *
- * `ConsoleNotificationProvider` existe apenas como instrumento de desenvolvimento.
- * Em produção ele falha explicitamente: ausência de canal real precisa virar retry/
- * erro observável, nunca um falso sucesso registrado como mensagem entregue.
- * Mantê-lo centralizado aqui também evita que um caminho fique preso ao console
- * quando o canal real for trocado.
- */
-/**
- * O canal da casa por cima do canal de reserva (bloco 82).
- *
- * ## Por que o roteamento é aqui, e não em cada chamador
- *
- * Antes deste bloco, `enviarPeloWhatsApp` não tinha chamador nenhum fora do
- * teste: a barbearia cadastrava o número, via "Ativo" na tela, aprovava o
- * template — e toda mensagem continuava saindo pelo log. A primeira versão do
- * conserto ligou os dois caminhos que já resolviam a unidade (campanha e
- * automação) e deixou o lembrete de 24h de fora, o que é o defeito da §6
- * pergunta 6: duas telas afirmando coisas diferentes sobre o mesmo fato.
- *
- * Com o roteamento **no provedor**, existe um lugar só que decide o canal — e
- * é a mesma razão de haver um provedor só no processo: um caminho que decide
- * sozinho é o caminho que não troca junto quando o canal muda.
- *
- * ## Reserva não é falha
- *
- * `enviarPeloWhatsApp` devolve `null` quando o canal não está disponível —
- * `WHATSAPP_MODO=nenhum`, cadastro em branco, número não verificado, template
- * não aprovado — e aí a mensagem cai para o console, que é o que a SPEC §4.12
- * pede em letras. Transformar indisponibilidade em exceção faria a tarefa da
- * fila morrer em vez de usar o outro caminho.
- *
- * ## As variáveis posicionais saem de `VARIAVEIS_DO_AVISO`
- *
- * A Meta preenche por **posição**, e a ordem daqui precisa ser a mesma que a
- * tela de cadastro do texto mostra. Escritas nos dois lugares, elas divergiram:
- * a tela prometia hora e profissional, e aqui saíam nome e **nome da
- * barbearia** — quem escrevesse "seu corte é amanhã às {{2}}" mandava ao
- * cliente "seu corte é amanhã às Barbearia Matheus".
- *
- * E o pior era o dado descartado: `quandoTexto` e `profissional` já chegavam
- * dentro da mensagem de agendamento e não eram lidos.
- */
+/** Um roteador por unidade para todos os avisos; console só pode operar no desenvolvimento. */
 class CanalDaCasa implements NotificationProvider {
   constructor(private readonly reserva: NotificationProvider) {}
 
   private async pelaCasa(params: {
     readonly tenantId: string;
     readonly locationId: string;
+    readonly intentKey: string;
+    readonly customerId: string | null;
     readonly tipo: TipoDeNotificacao;
     readonly telefone: string;
     readonly clienteNome: string;
+    readonly link?: string;
+    readonly minutosParaResponder?: number;
+    readonly resposta?: string;
+    readonly texto?: string;
+    readonly numero?: string | null;
     readonly barbearia: string;
     /** Só as mensagens de horário marcado têm os dois. */
     readonly quandoTexto?: string | undefined;
@@ -241,8 +204,6 @@ class CanalDaCasa implements NotificationProvider {
     /** Qual texto mandar, quando quem chamou escolheu (bloco 94). */
     readonly templateId?: string | null | undefined;
   }): Promise<string | null> {
-    const zap = await provedorDoWhatsApp(params.tenantId, params.locationId);
-    if (!zap) return null;
 
     /**
      * A ordem é a de `VARIAVEIS_DO_AVISO`, e a correspondência é por posição.
@@ -257,9 +218,15 @@ class CanalDaCasa implements NotificationProvider {
       'o nome da barbearia': params.barbearia,
       'a hora do agendamento': params.quandoTexto ?? '',
       'o nome do profissional': params.profissional ?? '',
+      'o link da vaga': params.link ?? '',
+      'os minutos para responder': params.minutosParaResponder === undefined ? '' : String(params.minutosParaResponder),
+      'a resposta ao recado': params.resposta ?? '',
+      'o aviso da assinatura': params.texto ?? '',
+      'o número da nota': params.numero ?? 'disponível',
+      'o link da nota': params.link ?? '',
     };
 
-    const enviada = await enviarPeloWhatsApp({
+    const enviada = await enviarNoCanalDaUnidade({
       tenantId: params.tenantId,
       locationId: params.locationId,
       tipo: params.tipo,
@@ -268,15 +235,18 @@ class CanalDaCasa implements NotificationProvider {
       templateId: params.templateId ?? null,
       // `notifications` já guarda quem recebeu; `whatsapp_messages` guarda o
       // vínculo com o template, e é por ele que a entrega é conciliada.
-      customerId: null,
+      customerId: params.customerId,
+      intentKey: params.intentKey,
       appointmentId: params.appointmentId ?? null,
-      provider: zap,
     });
     return enviada?.wamid ?? null;
   }
 
   async enviarDeAgendamento(mensagem: MensagemDeAgendamento): Promise<void> {
     const foi = await this.pelaCasa({
+      intentKey: mensagem.intentKey,
+      customerId: mensagem.customerId,
+      appointmentId: mensagem.appointmentId ?? null,
       tenantId: mensagem.tenantId,
       locationId: mensagem.locationId,
       tipo: mensagem.tipo,
@@ -292,6 +262,9 @@ class CanalDaCasa implements NotificationProvider {
 
   async enviarDeFila(mensagem: MensagemDeFila): Promise<void> {
     const foi = await this.pelaCasa({
+      intentKey: mensagem.intentKey,
+      customerId: mensagem.customerId,
+      appointmentId: mensagem.appointmentId ?? null,
       tenantId: mensagem.tenantId,
       locationId: mensagem.locationId,
       tipo: 'sua_vez',
@@ -304,6 +277,9 @@ class CanalDaCasa implements NotificationProvider {
 
   async enviarDeAutomacao(mensagem: MensagemDeAutomacao): Promise<void> {
     const foi = await this.pelaCasa({
+      intentKey: mensagem.intentKey,
+      customerId: mensagem.customerId,
+      appointmentId: mensagem.appointmentId ?? null,
       tenantId: mensagem.tenantId,
       locationId: mensagem.locationId,
       tipo: mensagem.tipo,
@@ -317,6 +293,9 @@ class CanalDaCasa implements NotificationProvider {
 
   async enviarDeCampanha(mensagem: MensagemDeCampanha): Promise<string | null> {
     const wamid = await this.pelaCasa({
+      intentKey: mensagem.intentKey,
+      customerId: mensagem.customerId,
+      appointmentId: mensagem.appointmentId ?? null,
       tenantId: mensagem.tenantId,
       locationId: mensagem.locationId,
       tipo: mensagem.tipo,
@@ -331,58 +310,25 @@ class CanalDaCasa implements NotificationProvider {
     return this.reserva.enviarDeCampanha(mensagem);
   }
 
-  /**
-   * As quatro que **não** passam pelo canal da casa, e o motivo é um só.
-   *
-   * A Meta exige um template aprovado por tipo, e `notification_kind` não
-   * nomeia convite de vaga, recado, aviso do clube nem nota fiscal. Sem tipo
-   * não há template a escolher — então elas não têm por onde sair, e delegar é
-   * a resposta certa, não um esquecimento.
-   */
-  enviarDeVaga(mensagem: MensagemDeVaga): Promise<void> {
-    return this.reserva.enviarDeVaga(mensagem);
+  async enviarDeVaga(m: MensagemDeVaga): Promise<void> {
+    const foi = await this.pelaCasa({ ...m, telefone: m.phoneE164, tipo: 'vaga_liberada' });
+    if (!foi) await this.reserva.enviarDeVaga(m);
   }
-  enviarDeRecado(mensagem: MensagemDeRecado): Promise<void> {
-    return this.reserva.enviarDeRecado(mensagem);
+  async enviarDeRecado(m: MensagemDeRecado): Promise<void> {
+    const foi = await this.pelaCasa({ ...m, telefone: m.phoneE164, tipo: 'resposta_recado' });
+    if (!foi) await this.reserva.enviarDeRecado(m);
   }
-  enviarDoClube(mensagem: MensagemDoClube): Promise<void> {
-    return this.reserva.enviarDoClube(mensagem);
+  async enviarDoClube(m: MensagemDoClube): Promise<void> {
+    const foi = await this.pelaCasa({ ...m, telefone: m.phoneE164, clienteNome: '', tipo: 'aviso_clube' });
+    if (!foi) await this.reserva.enviarDoClube(m);
   }
-  enviarDeNota(mensagem: MensagemDeNota): Promise<void> {
-    return this.reserva.enviarDeNota(mensagem);
+  async enviarDeNota(m: MensagemDeNota): Promise<void> {
+    const foi = await this.pelaCasa({ ...m, telefone: m.phoneE164, clienteNome: '', tipo: 'nota_fiscal' });
+    if (!foi) await this.reserva.enviarDeNota(m);
   }
 }
 
 const provider: NotificationProvider = new CanalDaCasa(new ConsoleNotificationProvider());
-
-/**
- * O adquirente do clube — hoje, o de mentira.
- *
- * Ele **recusa** toda cobrança, e isso é o comportamento correto do produto como
- * ele está: não existe ainda por onde a barbearia tokenizar o cartão do
- * assinante (lacuna declarada, bloco 51). Sem token salvo a régua nem chega a
- * chamá-lo — ela pula a cobrança sem gastar degrau —, e o caminho que de fato
- * quita a mensalidade é o balcão registrando o Pix que viu no extrato.
- *
- * Está aqui, e não dentro de `finance`, pelo mesmo motivo de todos os outros
- * provedores: quem escolhe implementação é quem monta o processo. No dia em que
- * a tokenização entrar, troca-se esta linha e nada mais.
- */
-let clubeProvider: CobrancaDoClubeProvider | null = null;
-const cobrancaDoClube = (): CobrancaDoClubeProvider =>
-  (clubeProvider ??= new FakeCobrancaDoClubeProvider());
-
-/**
- * O adquirente do split — hoje, o de mentira (bloco 50).
- *
- * Ele deixa o cadastro **pendente** e recusa o repasse, e as duas escolhas são o
- * estado real do produto sem conta contratada. Sem cadastro aprovado a parte do
- * barbeiro fica retida, o dinheiro cai inteiro na casa e a comissão sai no
- * fechamento — que é como toda barbearia do país paga o barbeiro hoje, e é o
- * caminho que a SPEC §3.5 manda não bloquear.
- */
-let splitProvider: SplitProvider | null = null;
-const adquirenteDoSplit = (): SplitProvider => (splitProvider ??= new FakeSplitProvider());
 
 async function main(): Promise<void> {
   // Mesma guarda da API: se a conexão ignora RLS, o isolamento entre barbearias
@@ -390,6 +336,8 @@ async function main(): Promise<void> {
   // desenho — uma tarefa de cada barbearia, uma de cada vez.
   await assertRlsEnforced();
 
+  const baileys = baileysHabilitado() ? new RuntimeBaileys(undefined, codigo => logWorker(codigo)) : null;
+  baileys?.iniciar();
   let parando = false;
   const parar = (sinal: string): void => {
     if (parando) return;
@@ -401,11 +349,14 @@ async function main(): Promise<void> {
     logWorker('worker.sinal', { sinal, acao: 'terminar_tarefa_em_curso' });
   };
 
-  process.on('SIGTERM', () => parar('SIGTERM'));
-  process.on('SIGINT', () => parar('SIGINT'));
+  const aoTerminar = () => parar('SIGTERM');
+  const aoInterromper = () => parar('SIGINT');
+  process.on('SIGTERM', aoTerminar);
+  process.on('SIGINT', aoInterromper);
 
   logWorker('worker.iniciado', { intervaloMs: INTERVALO_MS });
 
+  try {
   await rodarWorker(
     {
       provider,
@@ -489,18 +440,12 @@ async function main(): Promise<void> {
        * `sent_at` depois do sucesso do provider. Resultado externo incerto fica
        * bloqueado para conciliação; falha explícita libera uma nova tentativa.
        */
-      /**
-       * O que a Meta ainda não respondeu desta barbearia (bloco 90).
-       *
-       * `primaryLocation` e não todas as unidades, como `rodarAutomacoes`: o
-       * cadastro de WhatsApp é por unidade, e cobrir a rede inteira aqui seria
-       * escopo que nenhuma barbearia deste produto exerce hoje — está declarado
-       * como lacuna, com bloco, em vez de virar um laço que ninguém exercita.
-       */
       conciliarWhatsApp: async (tenantId, agora) => {
-        const local = await primaryLocation(tenantId);
-        if (!local) return { promovido: false, templates: 0 };
-        return conciliarWhatsAppDaUnidade(tenantId, local.id, agora);
+        const resultado = await conciliarWhatsAppDoTenant(tenantId, agora);
+        if (baileysHabilitado()) { await conciliarEnviosBaileys(tenantId, agora); await expirarConteudoBaileys(tenantId, agora); }
+        logWorker('whatsapp.conciliacao', { tenantId, ...resultado });
+        if (resultado.falhas > 0) throw new Error('Falha ao conciliar unidades do WhatsApp');
+        return resultado;
       },
       /**
        * A unidade sai da **linha do texto**, não de `primaryLocation`.
@@ -527,46 +472,14 @@ async function main(): Promise<void> {
         if (!local) return;
 
         const varrida = await varrerAutomacoes({ tenantId, agora, timeZone: local.timezone });
-        const fila = await disparosAEnviar(tenantId, agora);
-
-        let enviados = 0;
-        for (const disparo of fila) {
-          const nossa = await reservarDisparoDaAutomacao({
-            tenantId,
-            disparoId: disparo.id,
-            agora,
-            timeZone: local.timezone,
-          });
-          if (!nossa) continue;
-
-          try {
-            // Quem escolhe o canal é o provedor. A vaga promocional já existe,
-            // mas `sent_at` ainda não: recusa explícita não pode virar sucesso.
-            await provider.enviarDeAutomacao({
-              tenantId,
-              locationId: local.id,
-              phoneE164: disparo.telefone,
-              clienteNome: disparo.clienteNome,
-              barbearia: disparo.barbearia,
-              tipo: disparo.tipo,
-              templateId: disparo.templateId,
-            });
-          } catch (erro) {
-            if (erro instanceof WhatsAppDeliveryUnknownError) {
-              await marcarDisparoDaAutomacaoIncerto({ tenantId, disparoId: disparo.id, agora });
-              continue;
-            }
-            await liberarDisparoDaAutomacao({ tenantId, disparoId: disparo.id });
-            throw erro;
-          }
-
-          const confirmou = await confirmarDisparoDaAutomacao({
-            tenantId,
-            disparoId: disparo.id,
-            agora,
-          });
-          if (confirmou) enviados += 1;
-        }
+        const enviados = await despacharAutomacoes({ tenantId, agora,
+          enviar: disparo => provider.enviarDeAutomacao({ tenantId,
+            locationId: disparo.locationId, intentKey: `promo:automacao:${disparo.id}`,
+            customerId: disparo.customerId, phoneE164: disparo.telefone,
+            clienteNome: disparo.clienteNome, barbearia: disparo.barbearia,
+            tipo: disparo.tipo, templateId: disparo.templateId,
+          }),
+        });
 
         await atribuirObjetivos({ tenantId, agora });
 
@@ -640,7 +553,9 @@ async function main(): Promise<void> {
           enviar: (alvo) =>
             provider.enviarDeCampanha({
               tenantId,
-              locationId: local.id,
+              locationId: alvo.locationId,
+              intentKey: `promo:campanha:${alvo.id}`,
+              customerId: alvo.customerId,
               phoneE164: alvo.telefone,
               clienteNome: alvo.clienteNome,
               barbearia: alvo.barbearia,
@@ -670,6 +585,8 @@ async function main(): Promise<void> {
       },
 
       entregarNotas: async (tenantId, agora) => {
+        const documentos = await prepararPdfsNfse(tenantId);
+        if (documentos.preparados || documentos.falhas) logWorker('fiscal.documentos', { tenantId, ...documentos });
         const resultado = await entregarNotasAutorizadas({
           tenantId,
           agora,
@@ -847,8 +764,7 @@ async function main(): Promise<void> {
        * oferecer, e o provedor de mensagem, que entrega. É o mesmo desenho da
        * retenção e da régua de cobrança.
        *
-       * O link carrega o token em claro — é a única vez que ele existe fora de
-       * quem o gerou. `notifications` guarda que a mensagem saiu, nunca o
+       * O link é recuperável pela cifra temporária da oferta até seu encerramento. `notifications` guarda que a mensagem saiu, nunca o
        * conteúdo dela.
        */
       oferecerVagaDaEspera: async (tenantId, vaga, agora) => {
@@ -861,17 +777,19 @@ async function main(): Promise<void> {
           agora,
         });
         if (!oferta || !oferta.telefone) return false;
+        const telefone = oferta.telefone;
 
-        await provider.enviarDeVaga({
-          phoneE164: oferta.telefone,
+        return executarEntregaDuravel({ tenantId, intentKey: `vaga:${oferta.id}`, customerId: oferta.customerId,
+          tipo: 'vaga_liberada', telefone: oferta.telefone, agora, enviar: () => provider.enviarDeVaga({
+          tenantId, locationId: vaga.locationId, intentKey: `vaga:${oferta.id}`, customerId: oferta.customerId,
+          phoneE164: telefone,
           clienteNome: oferta.customerNome,
           barbearia: oferta.barbearia,
           profissional: oferta.profissionalNome,
           quandoTexto: `${oferta.dia} às ${oferta.hora}`,
-          minutosParaResponder: MINUTOS_DE_JANELA_EXCLUSIVA,
+          minutosParaResponder: Math.max(1, Math.ceil((oferta.venceEm.getTime() - agora.getTime()) / 60_000)),
           link: `${WEB_URL}/vaga/${oferta.token}`,
-        });
-        return true;
+        }) });
       },
 
       /**
@@ -883,30 +801,7 @@ async function main(): Promise<void> {
        * regras neste arquivo.
        */
       vencerOfertasDaEspera: async (tenantId, agora) => {
-        const vagas = await vencerOfertasDaEspera(tenantId, agora);
-        for (const vaga of vagas) {
-          await oferecerProximaVaga({
-            tenantId,
-            locationId: vaga.locationId,
-            professionalId: vaga.professionalId,
-            inicio: vaga.inicio,
-            fim: vaga.fim,
-            agora,
-            exceto: vaga.exceto,
-          }).then(async (oferta) => {
-            if (!oferta || !oferta.telefone) return;
-            await provider.enviarDeVaga({
-              phoneE164: oferta.telefone,
-              clienteNome: oferta.customerNome,
-              barbearia: oferta.barbearia,
-              profissional: oferta.profissionalNome,
-              quandoTexto: `${oferta.dia} às ${oferta.hora}`,
-              minutosParaResponder: MINUTOS_DE_JANELA_EXCLUSIVA,
-              link: `${WEB_URL}/vaga/${oferta.token}`,
-            });
-          });
-        }
-        return vagas.length;
+        return (await vencerOfertasDaEspera(tenantId, agora)).length;
       },
 
       /**
@@ -921,13 +816,14 @@ async function main(): Promise<void> {
         const resposta = await respostaParaEnviar(tenantId, recadoId);
         if (!resposta) return false;
 
-        await provider.enviarDeRecado({
+        return executarEntregaDuravel({ tenantId, intentKey: `recado:${recadoId}`, customerId: resposta.customerId,
+          tipo: 'resposta_recado', telefone: resposta.telefone, agora: new Date(), enviar: () => provider.enviarDeRecado({
+          tenantId, locationId: resposta.locationId, intentKey: `recado:${recadoId}`, customerId: resposta.customerId,
           phoneE164: resposta.telefone,
           clienteNome: resposta.clienteNome,
           barbearia: resposta.barbearia,
           resposta: resposta.resposta,
-        });
-        return true;
+        }) });
       },
 
       /**
@@ -961,7 +857,7 @@ async function main(): Promise<void> {
       rodarCobrancaDoClube: async (tenantId, agora) => {
         const resultado = await aplicarReguaDoClube({
           tenantId,
-          provider: cobrancaDoClube(),
+          provider: adquirenteDoClube(),
           agora,
         });
         const mexeu = Object.values(resultado).some((n) => n > 0);
@@ -977,7 +873,7 @@ async function main(): Promise<void> {
        * entrar — e este carrega a frase que diz ao cliente que o plano dele
        * parou.
        */
-      avisarDoClube: async (tenantId, assinaturaId, motivo, agora) => {
+      avisarDoClube: async (tenantId, assinaturaId, motivo, agora, intentKey) => {
         const aviso = await montarAvisoDoClube({
           tenantId,
           assinaturaId,
@@ -986,13 +882,16 @@ async function main(): Promise<void> {
         });
         if (!aviso) return false;
 
-        await provider.enviarDoClube({
+        const local = await primaryLocation(tenantId);
+        if (!local) return false;
+        return executarEntregaDuravel({ tenantId, intentKey, customerId: aviso.customerId, tipo: 'aviso_clube',
+          telefone: aviso.telefone, agora, enviar: () => provider.enviarDoClube({
+          tenantId, locationId: local.id, intentKey, customerId: aviso.customerId,
           phoneE164: aviso.telefone,
           barbearia: aviso.barbearia,
           motivo,
           texto: aviso.texto,
-        });
-        return true;
+        }) });
       },
 
       expirarEsperas: async (tenantId, agora) => {
@@ -1052,11 +951,13 @@ async function main(): Promise<void> {
          * causa de um webhook perdido.
          */
         if (psp) {
+          const cartoes = await conciliarCadastrosDeCartao();
+          if (cartoes.falhas) logWorker('cobranca.cadastro_cartao_falhou', { ...cartoes }, 'erro');
           const estornos = await conciliarEstornosPendentes({ provider: psp });
           if (estornos.consultados > 0) logWorker('cobranca.estornos_pendentes', { ...estornos });
 
           const conciliadas = await conciliarPendentes({ provider: psp });
-          if (conciliadas.consultadas > 0) logWorker('cobranca.conciliacao_global', { ...conciliadas });
+          if (conciliadas.consultadas > 0 || conciliadas.falhas > 0) logWorker('cobranca.conciliacao_global', { ...conciliadas }, conciliadas.falhas ? 'erro' : 'info');
         }
 
         const resultado = await aplicarRegua({ agora, provider: cobranca });
@@ -1091,6 +992,7 @@ async function main(): Promise<void> {
         }, evento.fase === 'falhou' ? 'erro' : evento.fase === 'reagendada' ? 'aviso' : 'info');
       },
       aoRodar: (resultado: ResultadoDaRodada) => {
+        marcarWorkerPronto();
         // Rodada vazia é a maioria e não vira linha de log: um worker que
         // escreve a cada cinco segundos enterra o dia em que algo falhou.
         if (resultado.tomadas === 0) return;
@@ -1104,7 +1006,11 @@ async function main(): Promise<void> {
     },
   );
 
-  await disconnect();
+  } finally {
+    process.off('SIGTERM', aoTerminar);
+    process.off('SIGINT', aoInterromper);
+    try { await baileys?.parar(); } finally { await disconnect(); }
+  }
   logWorker('worker.encerrado');
 }
 

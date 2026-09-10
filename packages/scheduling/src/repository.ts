@@ -152,6 +152,7 @@ export async function loadRangeContext(
      * ocupar o slot — o próprio hold não pode barrá-lo.
      */
     readonly ignoreHoldId?: string;
+    readonly now?: Date;
   },
 ): Promise<RangeContext | null> {
   const { locationId, dates } = params;
@@ -479,7 +480,7 @@ export async function loadRangeContext(
     WHERE professional_id = ANY(${professionalIds}::uuid[])
       AND starts_at < ${rangeEnd}
       AND ends_at > ${rangeStart}
-      AND expires_at > now()
+      AND expires_at > COALESCE(${params.now ?? null}::timestamptz, now())
       AND (${params.ignoreHoldId ?? null}::uuid IS NULL
            OR id <> ${params.ignoreHoldId ?? null}::uuid)
   `;
@@ -506,7 +507,7 @@ export async function loadRangeContext(
          WHERE professional_id = ANY(${professionalIds}::uuid[])
            AND starts_at >= ${rangeStart}
            AND starts_at < ${rangeEnd}
-           AND expires_at > now()
+           AND expires_at > COALESCE(${params.now ?? null}::timestamptz, now())
            AND (${params.ignoreHoldId ?? null}::uuid IS NULL
                 OR id <> ${params.ignoreHoldId ?? null}::uuid)
       ) AS agenda
@@ -554,7 +555,7 @@ export async function loadRangeContext(
          WHERE p.location_id = ${locationId}::uuid
            AND h.starts_at < ${rangeEnd}
            AND h.ends_at > ${rangeStart}
-           AND h.expires_at > now()
+           AND h.expires_at > COALESCE(${params.now ?? null}::timestamptz, now())
            AND (${params.ignoreHoldId ?? null}::uuid IS NULL
                 OR h.id <> ${params.ignoreHoldId ?? null}::uuid)
       ) AS uso
@@ -650,12 +651,14 @@ export async function loadDayContext(
     readonly atCounter?: boolean;
     readonly ignoreAppointmentId?: string;
     readonly ignoreHoldId?: string;
+    readonly now?: Date;
   },
 ): Promise<DayContext | null> {
   const range = await loadRangeContext(tx, {
     locationId: params.locationId,
     serviceIds: params.serviceIds,
     dates: [params.date],
+    ...(params.now ? { now: params.now } : {}),
     ...(params.professionalId ? { professionalId: params.professionalId } : {}),
     ...(params.atCounter ? { atCounter: true } : {}),
     ...(params.ignoreAppointmentId ? { ignoreAppointmentId: params.ignoreAppointmentId } : {}),

@@ -1,0 +1,19 @@
+{
+  "check_completo_exit_code": 2,
+  "check_fonte_propria_exit_code": 0,
+  "ocorrencias_upstream": 5885,
+  "arquivos_upstream": [
+    "packages/finance/schemas/nfse-1.01/CNC_v1.00.xsd",
+    "packages/finance/schemas/nfse-1.01/DPS_v1.01.xsd",
+    "packages/finance/schemas/nfse-1.01/NFSe_v1.01.xsd",
+    "packages/finance/schemas/nfse-1.01/evento_v1.01.xsd",
+    "packages/finance/schemas/nfse-1.01/pedRegEvento_v1.01.xsd",
+    "packages/finance/schemas/nfse-1.01/tiposCnc_v1.00.xsd",
+    "packages/finance/schemas/nfse-1.01/tiposComplexos_v1.01.xsd",
+    "packages/finance/schemas/nfse-1.01/tiposEventos_v1.01.xsd",
+    "packages/finance/schemas/nfse-1.01/tiposSimples_v1.01.xsd",
+    "packages/finance/schemas/nfse-1.01/xmldsig-core-schema.xsd",
+    "patches/libsignal@6.0.0.patch"
+  ],
+  "observacao": "XSD oficiais preservados byte a byte com CRLF/espaços originais; linhas em branco de contexto do patch unificado preservadas. Nenhuma ocorrência fora desses artefatos."
+}

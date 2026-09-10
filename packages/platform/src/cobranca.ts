@@ -144,7 +144,7 @@ export interface CobrancaProvider {
 }
 
 export type ResultadoDaCobranca =
-  | { readonly pago: true; readonly metodo: MetodoDePagamento }
+  | { readonly pago: true; readonly metodo: MetodoDePagamento; readonly chargeId?: string }
   | {
       readonly pago: false;
       readonly motivo: string;
@@ -338,7 +338,7 @@ export async function faturasDaBarbearia(tenantId: string): Promise<readonly Fat
 }
 
 /** As que ainda estão em cobrança, da mais atrasada — é a fila do suporte. */
-export async function faturasEmCobranca(): Promise<readonly Fatura[]> {
+export async function faturasEmCobranca(cursor?: { vencimento: Date; id: string }): Promise<readonly Fatura[]> {
   return semTenant(async (tx) =>
     SELECT_DA_FATURA(
       await tx.$queryRaw<LinhaDeFatura[]>`
@@ -346,11 +346,24 @@ export async function faturasEmCobranca(): Promise<readonly Fatura[]> {
                period_end, due_at, attempts, notified_at, past_due_at, paid_at,
                paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
           FROM invoices WHERE status = 'open'
-         ORDER BY due_at
+           AND (${cursor?.id ?? null}::uuid IS NULL OR (due_at,id) > (${cursor?.vencimento ?? new Date(0)},${cursor?.id ?? null}::uuid))
+         ORDER BY due_at, id
          LIMIT 500
       `,
     ),
   );
+}
+
+/** Varredura por cursor: pendências antigas não ocultam as próximas 500 faturas. */
+export async function* percorrerFaturasEmCobranca(): AsyncGenerator<Fatura> {
+  let cursor: { vencimento: Date; id: string } | undefined;
+  for (;;) {
+    const pagina=await faturasEmCobranca(cursor);
+    for(const fatura of pagina) yield fatura;
+    if(pagina.length<500)return;
+    const ultima=pagina[pagina.length-1]!;
+    cursor={vencimento:ultima.vencimento,id:ultima.id};
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -374,10 +387,15 @@ export async function pagarFaturaNaTransacao(
     readonly chargeIdEsperado?: string;
   },
 ): Promise<{ readonly tenantId: string }> {
+  // Nova instrução após a trava: enxerga reserva commitada enquanto aguardava.
+  await tx.$queryRaw`SELECT id FROM invoices WHERE id=${entrada.faturaId}::uuid FOR UPDATE`;
   const linhas = await tx.$queryRaw<LinhaDeFatura[]>`
     UPDATE invoices
        SET status = 'paid', paid_at = now(), paid_method = ${entrada.metodo}, updated_at = now()
      WHERE id = ${entrada.faturaId}::uuid AND status = 'open'
+       AND (${entrada.adminId}::uuid IS NULL OR (psp_charge_id IS NULL AND NOT EXISTS (
+         SELECT 1 FROM invoice_charge_attempts a WHERE a.invoice_id=invoices.id AND a.state <> 'refused'
+       )))
        AND (${entrada.chargeIdEsperado ?? null}::text IS NULL
             OR psp_charge_id = ${entrada.chargeIdEsperado ?? null})
     RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
@@ -385,7 +403,7 @@ export async function pagarFaturaNaTransacao(
               paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
   `;
   const fatura = linhas[0];
-  if (!fatura) throw new PlataformaError('not_payable', 'Fatura inexistente ou já encerrada');
+  if (!fatura) throw new PlataformaError('not_payable', 'Fatura encerrada, inexistente ou com cobrança automática em curso. Confira a cobrança antes da baixa manual.');
 
   await registrarNaTrilha(tx, entrada.adminId, fatura.tenant_id, 'invoice.paid', {
     faturaId: entrada.faturaId,
@@ -401,6 +419,7 @@ export async function pagarFatura(entrada: {
   readonly adminId: string | null;
   readonly faturaId: string;
   readonly metodo: MetodoDePagamento;
+  readonly chargeIdEsperado?: string;
 }): Promise<{ readonly tenantId: string }> {
   return semTenant((tx) => pagarFaturaNaTransacao(tx, entrada));
 }
@@ -427,16 +446,18 @@ export async function cancelarFatura(entrada: {
   }
 
   return semTenant(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM invoices WHERE id=${entrada.faturaId}::uuid FOR UPDATE`;
     const linhas = await tx.$queryRaw<LinhaDeFatura[]>`
       UPDATE invoices
          SET status = 'void', voided_at = now(), void_reason = ${motivo}, updated_at = now()
-       WHERE id = ${entrada.faturaId}::uuid AND status = 'open'
+       WHERE id = ${entrada.faturaId}::uuid AND status = 'open' AND psp_charge_id IS NULL
+         AND NOT EXISTS (SELECT 1 FROM invoice_charge_attempts a WHERE a.invoice_id=invoices.id AND a.state <> 'refused')
       RETURNING id, tenant_id, kind, status, plan_code, amount_cents, period_start,
                 period_end, due_at, attempts, notified_at, past_due_at, paid_at,
                 paid_method, voided_at, void_reason, idempotency_key, psp_charge_id, created_at
     `;
     const fatura = linhas[0];
-    if (!fatura) throw new PlataformaError('not_voidable', 'Fatura inexistente ou já encerrada');
+    if (!fatura) throw new PlataformaError('not_voidable', 'Fatura encerrada, inexistente ou com cobrança automática em curso. Cancele a cobrança no adquirente e concilie antes de cancelar a fatura.');
 
     await registrarNaTrilha(tx, entrada.adminId, fatura.tenant_id, 'invoice.voided', {
       faturaId: entrada.faturaId,
@@ -501,6 +522,7 @@ async function encerrar(tx: TransactionClient, fatura: LinhaDeFatura): Promise<v
 
 export interface ResultadoDaRegua {
   readonly emitidas: number;
+  readonly falhas: number;
   readonly avisadas: number;
   readonly vencidas: number;
   readonly cobradas: number;
@@ -529,6 +551,7 @@ export async function aplicarRegua(entrada: {
 }): Promise<ResultadoDaRegua> {
   const contagem = {
     emitidas: 0,
+    falhas: 0,
     avisadas: 0,
     vencidas: 0,
     cobradas: 0,
@@ -541,7 +564,7 @@ export async function aplicarRegua(entrada: {
     if (await emitirFatura({ tenantId, agora: entrada.agora })) contagem.emitidas += 1;
   }
 
-  for (const fatura of await faturasEmCobranca()) {
+  for await (const fatura of percorrerFaturasEmCobranca()) {
     const estado: EstadoDaFatura = {
       status: fatura.estado,
       vencimento: fatura.vencimento,
@@ -572,16 +595,22 @@ export async function aplicarRegua(entrada: {
        * segundos e uma volta da régua tem centenas de faturas. O que a
        * transação faz depois é gravar o resultado, que é rápido.
        */
-      const resultado = await entrada.provider.cobrar({
-        tenantId: fatura.tenantId,
-        faturaId: fatura.id,
-        valorCents: fatura.valorCents,
-        tentativa: fatura.tentativas + 1,
-      });
+      let resultado: ResultadoDaCobranca;
+      try {
+        resultado = await entrada.provider.cobrar({
+          tenantId: fatura.tenantId, faturaId: fatura.id,
+          valorCents: fatura.valorCents, tentativa: fatura.tentativas + 1,
+        });
+      } catch {
+        // A tentativa incerta continua reservada. Uma conta que depende de
+        // conciliação não pode interromper a cobrança de todas as outras.
+        contagem.falhas += 1;
+        continue;
+      }
 
       if (resultado.pago) {
         try {
-          await pagarFatura({ adminId: null, faturaId: fatura.id, metodo: resultado.metodo });
+          await pagarFatura({ adminId: null, faturaId: fatura.id, metodo: resultado.metodo, ...(resultado.chargeId ? { chargeIdEsperado: resultado.chargeId } : {}) });
           contagem.pagas += 1;
         } catch (erro) {
           // Dois workers podem receber a mesma resposta idempotente do

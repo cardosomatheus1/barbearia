@@ -116,7 +116,7 @@ let wabasAssinadas: { tenantId: string; locationId: string }[] = [];
 let templatesEntregues: { tenantId: string; templateId: string; claim: string }[] = [];
 let automacoesRodadas: { tenantId: string; agora: Date }[] = [];
 let campanhasDespachadas: { tenantId: string; campanhaId: string }[] = [];
-let estadoDaNotaDoFake: 'pendente' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' =
+let estadoDaNotaDoFake: 'pendente' | 'processando' | 'autorizada' | 'rejeitada' | 'cancelada' | 'cancelando' =
   'autorizada';
 
 const ligacoesDaPlataforma = () => ({
@@ -453,6 +453,7 @@ describeIfDb('fila de trabalho', () => {
     senha_de_acesso: false,
     retorno: false,
     link_atualizado: false,
+      vaga_liberada: false, resposta_recado: false, aviso_clube: false, nota_fiscal: false,
   } as const;
 
   it('um agendamento programa confirmação e os dois lembretes', async () => {
@@ -910,7 +911,7 @@ describeIfDb('fila de trabalho', () => {
     ]);
   });
 
-  it('nota ainda na prefeitura reprograma a própria tarefa', async () => {
+  it.each(['processando', 'cancelando'] as const)('nota em %s mantém a consulta após várias rodadas', async estado => {
     /**
      * A tarefa se reprograma enquanto a nota não tem desfecho, como a varredura
      * de retorno do bloco 22. É por isso que não existe varredura de plataforma
@@ -918,7 +919,7 @@ describeIfDb('fila de trabalho', () => {
      * no contexto enxergaria zero linhas — sempre.
      */
     notasProcessadas = [];
-    estadoDaNotaDoFake = 'processando';
+    estadoDaNotaDoFake = estado;
     await enfileirarNoTenant({
       kind: 'fiscal.emitir',
       payload: { invoiceId: 'ff000000-0000-0000-0000-000000000002' },
@@ -944,6 +945,15 @@ describeIfDb('fila de trabalho', () => {
     // Cinco minutos: é a ordem de grandeza da resposta municipal, e o emissor
     // cobra por chamada.
     expect(proximas[0]!.run_after.getTime()).toBe(COMECA_EM.getTime() + 5 * 60_000);
+    for (const minutos of [5, 10]) {
+      await rodada({ provider, relogio: { agora: () => new Date(COMECA_EM.getTime() + minutos * 60_000) },
+        recursoLigado: async () => recursosLigados, entregarWebhook: async () => 'entregue' as const,
+        varrerWebhooks: async () => [], varrerVitrine: async () => 0, limparUsoDaApi: async () => 0,
+        ...ligacoesDaPlataforma() });
+    }
+    const terceira = await admin.$queryRaw<{ run_after: Date }[]>`SELECT run_after FROM jobs WHERE kind = 'fiscal.emitir' AND status = 'pending'`;
+    expect(terceira).toHaveLength(1);
+    expect(terceira[0]?.run_after.getTime()).toBe(COMECA_EM.getTime() + 15 * 60_000);
     estadoDaNotaDoFake = 'autorizada';
   });
 

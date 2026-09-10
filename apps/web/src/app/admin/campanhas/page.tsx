@@ -1,3 +1,4 @@
+import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
@@ -27,7 +28,6 @@ import {
   rotuloDoBotao,
 } from '@barbearia/core';
 import {
-  cadastroDoWhatsAppNaApi,
   campanhasNaApi,
   filaNaApi,
   puladosDaCampanhaNaApi,
@@ -337,7 +337,7 @@ function Campanha({
             */}
             <p className="item-cadastro__linha">
               Manda <strong>{campanha.textoTitulo ?? nomeDoAviso(campanha.tipo)}</strong>
-              {campanha.textoTitulo === null ? ' (o primeiro aprovado deste aviso)' : ''}
+              {campanha.textoTitulo === null ? ' (uma mensagem disponível deste aviso)' : ''}
             </p>
             <p className="item-cadastro__linha">{EXPLICACAO_DA_CAMPANHA[estado]}</p>
             {/*
@@ -575,7 +575,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
   const [resposta, base, canal, templates, listaDePulados, saudeDaFila] = await Promise.all([
     podeMexer ? campanhasNaApi(token) : Promise.resolve(null),
     podeNaTela(estado, 'customers.view') ? segmentosNaApi(token) : Promise.resolve(null),
-    podeVerCanal ? cadastroDoWhatsAppNaApi(token) : Promise.resolve(null),
+    podeVerCanal ? conexaoWhatsAppNaApi(token) : Promise.resolve(null),
     podeVerCanal ? templatesDoWhatsAppNaApi(token) : Promise.resolve(null),
     puladosDe && podeVerNomes && podeMexer
       ? puladosDaCampanhaNaApi(token, puladosDe)
@@ -606,6 +606,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
           </button>
         </form>
       </header>
+        <h1 className="painel__titulo">Campanhas</h1>
         <FalhaDaLeitura code="forbidden" href="/admin/campanhas" oque="as campanhas" />
       </main>
     );
@@ -613,15 +614,16 @@ export default async function CampanhasPage({ searchParams }: Props) {
 
   const fila = saudeDaFila?.ok ? saudeDaFila.dados : null;
   const pulados = listaDePulados?.ok ? listaDePulados.dados.pulados : null;
-  const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
+  const canalDePe = canal?.ok ? (canal.dados.canal === 'baileys'
+    ? canal.dados.baileys.disponivel && canal.dados.baileys.estado === 'conectado' : canal.dados.meta?.estado === 'ativo') : null;
   // Só o aprovado sai; mostrar rascunho prometeria o que a Meta ainda recusa.
-  const aprovadosNaMeta = (templates?.ok ? templates.dados.templates : []).filter(
-    (t) => t.estado === 'aprovado',
+  const textosDisponiveis = (templates?.ok ? templates.dados.templates : []).filter(
+    (t) => t.disponivel,
   );
   // E, dentro deles, só os de campanha: os outros falam de um horário marcado.
   // As duas contas são separadas porque o vazio precisa saber qual dos dois
   // zeros é o dela — ver `faltaDeTexto`.
-  const textos = aprovadosNaMeta.filter((t) =>
+  const textos = textosDisponiveis.filter((t) =>
     (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
   // Escolha de mentira é pior que campo nenhum: com um texto só, o rádio pede
@@ -720,8 +722,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
       {canalDePe === false ? (
         <div className="ui-alert ui-alert--warning painel__aviso" role="status">
           O WhatsApp da casa ainda não está pronto, então nada chega ao cliente.{' '}
-          <a href="/admin/whatsapp">Conectar o número e aprovar um texto</a> — são três passos, e
-          a tela diz em qual você está.
+          <a href="/admin/whatsapp">Confira a conexão do número</a>.
         </div>
       ) : null}
 
@@ -918,9 +919,9 @@ export default async function CampanhasPage({ searchParams }: Props) {
                     não é a aprovação: é que nenhum aprovado serve a uma campanha.
                   */
                   <p className="alternativa__nota alternativa__nota--risco">
-                    {faltaDeTexto(aprovadosNaMeta.length, textos.length) === 'nada_aprovado'
-                      ? 'Nenhum texto aprovado — nada vai sair.'
-                      : `Nenhum texto de ${tiposDeCampanhaPorExtenso('ou')} aprovado — nada vai sair. Os que você tem falam de um horário marcado, e quem recebe uma campanha não tem.`}
+                    {faltaDeTexto(textosDisponiveis.length, textos.length) === 'nada_aprovado'
+                      ? 'Nenhuma mensagem disponível nesta conexão.'
+                      : `Nenhum texto de ${tiposDeCampanhaPorExtenso('ou')} disponível nesta conexão. Os que você tem falam de um horário marcado, e quem recebe uma campanha não tem.`}
                   </p>
                 ) : (
                   textos.map((texto, i) => (
@@ -956,8 +957,7 @@ export default async function CampanhasPage({ searchParams }: Props) {
                 )}
               </div>
               <p className="ui-field__hint">
-                É este o texto que chega no WhatsApp, com o nome e a barbearia já preenchidos, e
-                ele não se escreve aqui: a Meta aprova cada um antes de deixar enviar.{' '}
+                O texto chega com o nome do cliente e da barbearia preenchidos.{' '}
                 <a href="/admin/whatsapp">Escrever outro em WhatsApp</a> — cada texto novo vira
                 uma opção nesta lista. Lembrete e confirmação não entram: são do agendamento, e
                 como campanha prometeriam um horário que a pessoa não tem.

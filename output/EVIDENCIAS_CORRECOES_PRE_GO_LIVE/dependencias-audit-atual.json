@@ -1,0 +1,11 @@
+{
+  "name": "dependencias-audit-atual",
+  "command": [
+    "pnpm",
+    "audit",
+    "--json"
+  ],
+  "started_utc": "2026-09-10T04:20:04.480562+00:00",
+  "duration_seconds": 1.78,
+  "exit_code": 0
+}

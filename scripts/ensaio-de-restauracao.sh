@@ -45,7 +45,7 @@ reprovar() { printf '  \033[31mFALHOU\033[0m  %s\n' "$1"; failures=1; falhas=$((
 aprovar()  { printf '  \033[32mok\033[0m      %s\n' "$1"; }
 
 printf '\n\033[1m==> dump de %s\033[0m\n' "$ORIGEM_DB"
-pg_dump "$ORIGEM" --format=plain --no-owner --no-privileges --file="$DUMP"
+pg_dump "$ORIGEM" --format=plain --no-owner --file="$DUMP"
 printf '    %s\n' "$(du -h "$DUMP" | cut -f1)"
 
 printf '\n\033[1m==> restauração num banco descartável\033[0m\n'
@@ -134,16 +134,15 @@ ultima_migracao=$(ls packages/db/migrations/*.sql | tail -1 | xargs basename)
 printf '\n\033[1m==> versão do schema\033[0m\n'
 printf '    última migração no repositório: %s\n' "$ultima_migracao"
 
-# As colunas do bloco 22 são o marcador mais recente que o schema carrega. Trocar
-# isto por uma tabela de versões é o passo natural quando houver deploy de
-# verdade — está declarado como lacuna no ROADMAP.
-tem_import=$(conta "$ENSAIO" "
-  SELECT count(*) FROM information_schema.columns
-  WHERE table_schema='public' AND table_name='customers' AND column_name='import_id'")
-if [ "$tem_import" = "1" ]; then
-  aprovar "schema restaurado tem as colunas da última migração aplicada"
+if node packages/db/scripts/check-schema.mjs current "$ENSAIO"; then
+  aprovar "schema completo corresponde ao checkout"
 else
-  reprovar "schema restaurado é anterior à migração 0025 — a aplicação não sobe contra ele"
+  reprovar "schema ou histórico incompleto/divergente"
+fi
+if node packages/db/scripts/check-schema.mjs app "$ENSAIO"; then
+  aprovar "aplicação conecta ao restaurado com grants e RLS"
+else
+  reprovar "banco restaurado não atende ao role real da aplicação"
 fi
 
 printf '\n'

@@ -21,12 +21,18 @@
     "@barbearia/core": "workspace:*",
     "@barbearia/db": "workspace:*",
     "@barbearia/identity": "workspace:*",
-    "@barbearia/jobs": "workspace:*"
+    "@barbearia/jobs": "workspace:*",
+    "fast-xml-parser": "^5.11.1",
+    "libxml2-wasm": "0.7.2",
+    "node-forge": "^1.4.0",
+    "xml-crypto": "^6.1.2",
+    "xmlbuilder2": "^4.0.3"
   },
   "devDependencies": {
     "@prisma/client": "^6.19.3",
     "@types/node": "^22.20.1",
+    "@types/node-forge": "^1.3.14",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "4.1.11"
   }
 }

@@ -50,4 +50,4 @@ echo "==> cliente com escopo de tenant"
 export DATABASE_URL="$BASE/$DB_NAME"
 APP_DATABASE_URL="$(../../scripts/url-do-app.sh "$ADMIN_URL" "$APP_DB_PASSWORD" "$DB_NAME")"
 export APP_DATABASE_URL
-exec vitest run
+vitest run "$@"

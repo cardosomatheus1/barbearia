@@ -347,8 +347,9 @@ export default async function ComissaoPage({ searchParams }: Props) {
     veTodos ? valesNaApi(token, de, ate) : Promise.resolve(null),
   ]);
 
-  const podeMexerNoSplit = podeNaTela(estado, 'finance.split_manage');
   const dadosDoSplit = repasses.ok ? repasses.dados : null;
+  const splitDisponivel = dadosDoSplit && 'disponivel' in dadosDoSplit && dadosDoSplit.disponivel === true;
+  const podeMexerNoSplit = podeNaTela(estado, 'finance.split_manage') && splitDisponivel;
   /*
     O barbeiro chama a rota do próprio holerite, que não devolve configuração —
     ele não decide se o split está ligado, e a rota que decide exige uma
@@ -545,7 +546,16 @@ export default async function ComissaoPage({ searchParams }: Props) {
       <section className="cartao-balcao">
         <h2 className="cartao-balcao__titulo">Repasse direto</h2>
 
-        {!ligado ? (
+        {!splitDisponivel ? (
+          <>
+            <p className="vazio">Repasse automático indisponível nesta instalação. O acerto com os profissionais é feito pela comissão.</p>
+            {ligado && podeNaTela(estado, 'finance.split_manage') ? (
+              <form action={acaoSalvarSplit}>
+                <button type="submit" className="ui-button ui-button--secondary">Desligar repasse direto</button>
+              </form>
+            ) : null}
+          </>
+        ) : !ligado ? (
           <>
             <p className="vazio">
               Desligado. O cliente paga a barbearia, e a comissão sai no fechamento do período,

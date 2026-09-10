@@ -556,8 +556,11 @@ describeIfDb('anonimização e retenção', () => {
      * quem acrescenta tabela a atualiza — o bloco 74 não atualizou, e o
      * resultado seria a foto de quem pediu exclusão continuar no ar.
      *
-     * O teste lê o **corpo da função** e cobra que cada tabela com `customer_id`
-     * apareça nele, ou esteja aqui com o motivo.
+     * O teste lê o corpo da função e dos gatilhos habilitados que a atualização
+     * de anonymized_at aciona. Cada tabela com customer_id precisa aparecer
+     * nessa cadeia, ou estar aqui com o motivo. A prova comportamental da
+     * outbox está em baileys/runtime.integration.test.ts; função sem gatilho
+     * instalado não conta como limpeza.
      */
     const ondeFica = new Map([
       // Fatos do negócio: a pessoa sai de dentro deles pela chave estrangeira
@@ -586,9 +589,18 @@ describeIfDb('anonimização e retenção', () => {
     ]);
 
     const corpo = await admin.$queryRawUnsafe<{ src: string }[]>(
-      `SELECT prosrc AS src FROM pg_proc WHERE proname = 'anonimizar_cliente'`,
+      `SELECT prosrc AS src FROM pg_proc
+        WHERE oid = 'public.anonimizar_cliente(uuid,text)'::regprocedure
+       UNION ALL
+       SELECT p.prosrc AS src FROM pg_trigger t
+         JOIN pg_proc p ON p.oid = t.tgfoid
+         JOIN pg_attribute a ON a.attrelid = t.tgrelid AND a.attname = 'anonymized_at'
+        WHERE t.tgrelid = 'public.customers'::regclass
+          AND NOT t.tgisinternal AND t.tgenabled IN ('O', 'A')
+          AND (t.tgtype & 16) = 16
+          AND (cardinality(t.tgattr::smallint[]) = 0 OR a.attnum = ANY(t.tgattr))`,
     );
-    const fonte = corpo[0]?.src ?? '';
+    const fonte = corpo.map((funcao) => funcao.src).join('\n');
     expect(fonte).not.toBe('');
 
     const tabelas = await admin.$queryRawUnsafe<{ table_name: string }[]>(

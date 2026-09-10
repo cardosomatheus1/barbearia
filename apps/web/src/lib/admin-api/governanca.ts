@@ -118,6 +118,7 @@ export const lerImportacao = (token: string, id: string) =>
   );
 
 export interface PlanoDaBarbearia {
+  cadastroCartaoDisponivel?: boolean;
   plano: { code: string; nome: string; publico: string; precoCents: number };
   estado: 'trialing' | 'active' | 'past_due' | 'canceled';
   testeAte: string | null;
@@ -135,6 +136,12 @@ export interface PlanoDaBarbearia {
 
 export const planoDaBarbearia = (token: string) =>
   chamar<PlanoDaBarbearia>('GET', '/v1/admin/plano', undefined, token);
+
+export const conciliarCartaoDaAssinatura = (token: string) =>
+  chamar<{ ok: true }>('POST', '/v1/admin/plano/cartao/conciliar', {}, token);
+
+export const cadastrarCartaoDaAssinatura = (token: string, consentiu: boolean, idempotencyKey: string) =>
+  chamar<{ url: string }>('POST', '/v1/admin/plano/cartao/checkout', { consentiu }, token, idempotencyKey);
 
 export interface OpcaoDePlano {
   code: string;
@@ -177,6 +184,7 @@ export const contestarClienteDoMarketplace = (
 ) => chamar<{ ok: true }>('POST', `/v1/admin/plano/marketplace/${id}/contestar`, dados, token);
 
 export interface FaturaDaBarbearia {
+  readonly cobrancaEmCurso?: boolean;
   id: string;
   tipo: 'subscription' | 'proration' | 'marketplace';
   estado: 'open' | 'paid' | 'void';
@@ -356,4 +364,3 @@ export const preferenciasDeAlerta = (token: string) =>
 
 export const salvarPreferenciasDeAlerta = (token: string, dados: PreferenciasDeAlerta) =>
   chamar<PreferenciasDeAlerta>('PUT', '/v1/admin/alertas/preferencias', dados, token);
-

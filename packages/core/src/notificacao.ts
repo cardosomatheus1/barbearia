@@ -36,6 +36,10 @@ export const TIPOS_DE_NOTIFICACAO = [
   'senha_de_acesso',
   'retorno',
   'link_atualizado',
+  'vaga_liberada',
+  'resposta_recado',
+  'aviso_clube',
+  'nota_fiscal',
 ] as const;
 export type TipoDeNotificacao = (typeof TIPOS_DE_NOTIFICACAO)[number];
 
@@ -97,6 +101,10 @@ export const NOME_DO_AVISO: Readonly<Record<TipoDeNotificacao, string>> = {
   lembrete_24h: 'Lembrete de 24 horas',
   lembrete_2h: 'Lembrete de 2 horas',
   sua_vez: 'Sua vez na fila',
+  vaga_liberada: 'Vaga na lista de espera',
+  resposta_recado: 'Resposta ao recado',
+  aviso_clube: 'Aviso da assinatura do cliente',
+  nota_fiscal: 'Nota fiscal disponível',
   senha_de_acesso: 'Senha de primeiro acesso',
   retorno: 'Convite de retorno',
   link_atualizado: 'Novo link de agendamento',
@@ -152,6 +160,12 @@ export const EXEMPLO_DA_VARIAVEL: Readonly<Record<string, string>> = {
   'o nome da barbearia': 'Barbearia Domari',
   'a hora do agendamento': 'terça-feira, 19 de agosto às 15:30',
   'o nome do profissional': 'Ruan',
+  'o link da vaga': 'https://exemplo.invalid/vaga/convite',
+  'os minutos para responder': '15',
+  'a resposta ao recado': 'Obrigado pelo contato. Seu pedido foi atendido.',
+  'o aviso da assinatura': 'Sua mensalidade está em aberto.',
+  'o número da nota': '123',
+  'o link da nota': 'https://exemplo.invalid/nota/documento',
 };
 
 /**
@@ -238,6 +252,10 @@ export const VARIAVEIS_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly str
   // A fila não tem hora nem profissional decidido: a pessoa está na barbearia
   // esperando, e o que importa é quem chama.
   sua_vez: ['o nome do cliente', 'o nome da barbearia'],
+  vaga_liberada: ['o nome do cliente', 'a hora do agendamento', 'o nome do profissional', 'o link da vaga', 'os minutos para responder'],
+  resposta_recado: ['o nome do cliente', 'o nome da barbearia', 'a resposta ao recado'],
+  aviso_clube: ['o nome da barbearia', 'o aviso da assinatura'],
+  nota_fiscal: ['o nome da barbearia', 'o número da nota', 'o link da nota'],
   senha_de_acesso: ['o nome do cliente', 'o nome da barbearia'],
   // Campanha e automação falam com quem não tem horário marcado.
   retorno: ['o nome do cliente', 'o nome da barbearia'],

@@ -15,3 +15,6 @@ export * from './admin-api/produto';
 export * from './admin-api/financeiro';
 export * from './admin-api/crescimento';
 export * from './admin-api/plataforma';
+
+export * from './admin-api/fiscal-nacional';
+export * from './admin-api/whatsapp-conexao';

@@ -94,6 +94,7 @@ async function resolveSlot(
     locationId: request.locationId,
     serviceIds: request.serviceIds,
     date: request.date,
+    ...(request.now ? { now: request.now } : {}),
     professionalId: request.professionalId,
     ...(request.atCounter ? { atCounter: true } : {}),
     ...(request.holdId ? { ignoreHoldId: request.holdId } : {}),
@@ -270,6 +271,7 @@ async function programarTarefas(
       // Não fala de um agendamento: é o recado de que o endereço mudou, e sai
       // por campanha para a base, não por horário marcado.
       link_atualizado: false,
+      vaga_liberada: false, resposta_recado: false, aviso_clube: false, nota_fiscal: false,
     },
   });
 
@@ -456,7 +458,7 @@ async function criarDentroDaTransacao(
             FROM slot_holds h
             LEFT JOIN slot_hold_resources shr ON shr.hold_id = h.id
            WHERE h.id = ${request.holdId}::uuid
-             AND h.expires_at > now()
+             AND h.expires_at > COALESCE(${request.now ?? null}::timestamptz, now())
            ORDER BY shr.resource_type
            FOR UPDATE OF h
         `)
@@ -638,7 +640,7 @@ export async function holdSlot(request: HoldRequest): Promise<HoldRef> {
       VALUES (
         ${request.tenantId}::uuid, ${request.professionalId}::uuid,
         ${slot.occupiedStart}, ${slot.occupiedEnd},
-        now() + make_interval(secs => ${ttl})
+        COALESCE(${request.now ?? null}::timestamptz, now()) + make_interval(secs => ${ttl})
       )
       RETURNING id, expires_at
     `;

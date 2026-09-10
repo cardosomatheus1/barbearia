@@ -1,3 +1,4 @@
+import { FakeNotificationProvider, varrerRetornos } from '@barbearia/jobs';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -111,6 +112,22 @@ describeIfDb('campanhas', () => {
               '${inicio.toISOString()}', '${fim.toISOString()}');
     `);
   };
+
+  it('convite de retorno e campanha concorrentes compartilham uma única cota por cliente', async () => {
+    await exec(`UPDATE locations SET notify_comeback=true,comeback_after_days=45 WHERE id='${LOCAL}';
+      UPDATE customers SET accepts_marketing=false WHERE id <> '${CARLOS}'`);
+    await atendimento(CARLOS,60,'c7575757-0000-0000-0000-000000000088');
+    const ca = await campanha(); const provider = new FakeNotificationProvider();
+    let enviosCampanha = 0;
+    await Promise.all([
+      varrerRetornos({ tenantId: TENANT, provider, agora: AGORA }),
+      despacharCampanha({ tenantId: TENANT, campanhaId: ca.id, agora: AGORA, timeZone: 'America/Bahia',
+        enviar: async () => { enviosCampanha++; return 'wamid.concorrencia.retorno'; } }),
+    ]);
+    expect(provider.agendamentos.length + enviosCampanha).toBe(1);
+    expect(await admin.$queryRaw`SELECT id FROM notification_send_intents WHERE customer_id=${CARLOS}::uuid AND status='sent'`).toHaveLength(1);
+    expect(await admin.$queryRaw`SELECT id FROM notifications WHERE customer_id=${CARLOS}::uuid AND status='sent'`).toHaveLength(1);
+  });
 
   it('o público é congelado na criação', async () => {
     /**
@@ -625,9 +642,10 @@ describeIfDb('campanhas', () => {
       await texto(T1, 'da_vizinha', 'retorno', VIZINHO);
       await expect(
         campanha({ tipo: undefined, templateId: T1 }),
-      ).rejects.toThrow(/não existe/);
+      ).rejects.toThrow(/não está disponível/);
     });
 
+    // A mensagem de erro cobre aprovação Meta e disponibilidade por canal.
     it('texto ainda não aprovado é recusado', async () => {
       // A tela só oferece aprovados, mas a borda aceita qualquer uuid — e uma
       // campanha apontada para um rascunho ficaria com o público congelado e
@@ -636,7 +654,7 @@ describeIfDb('campanhas', () => {
       await exec(`UPDATE whatsapp_templates SET status = 'rascunho' WHERE id = '${T1}'`);
       await expect(
         campanha({ tipo: undefined, templateId: T1 }),
-      ).rejects.toThrow(/não foi aprovado/);
+      ).rejects.toThrow(/não está disponível/);
     });
 
     it('texto que não serve para campanha é recusado pelo tipo dele', async () => {

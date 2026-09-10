@@ -1,5 +1,5 @@
 import { MOTIVOS_DA_CONTESTACAO_DE_COMISSAO } from '@barbearia/core';
-import { Body, Controller, Get, Headers, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Param, Post, UseGuards } from '@nestjs/common';
 import {
   assinaturaDaBarbearia,
   atribuicoesDaBarbearia,
@@ -11,6 +11,10 @@ import {
   planosParaODono,
   recursosDaBarbearia,
   trocarPlanoPeloDono,
+  iniciarCadastroDeCartao,
+  conciliarCadastrosDeCartao,
+  modoDoAdquirente,
+  prepararAutenticacaoDaCobranca,
 } from '@barbearia/platform';
 import { z } from 'zod';
 import type { AuthenticatedStaff } from '@barbearia/identity';
@@ -76,6 +80,7 @@ export class PlanoController {
     ]);
 
     return {
+      cadastroCartaoDisponivel: modoDoAdquirente() === 'stripe',
       plano: {
         code: assinatura.planoCode,
         nome: assinatura.planoNome,
@@ -118,6 +123,28 @@ export class PlanoController {
         noPlano: r.noPlano,
       })),
     };
+  }
+
+  @Exige('settings.manage')
+  @Post('cartao/checkout')
+  async cadastrarCartao(
+    @Staff() staff: AuthenticatedStaff,
+    @Body(new ZodValidationPipe(z.object({ consentiu: z.literal(true) }).strict())) body: { consentiu: true },
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    if (!idempotencyKey || idempotencyKey.length > 128) throw badRequest('invalid_request', 'Idempotency-Key é obrigatória');
+    try {
+      return await iniciarCadastroDeCartao({ tenantId: staff.tenantId, staffUserId: staff.staffUserId,
+        idempotencyKey, consentiu: body.consentiu });
+    } catch (erro) { return paraHttp(erro); }
+  }
+
+  @Exige('settings.manage')
+  @Post('cartao/conciliar')
+  async conciliarCartao(@Staff() staff: AuthenticatedStaff) {
+    const resultado = await conciliarCadastrosDeCartao(staff.tenantId);
+    if (resultado.falhas > 0) throw new DomainError('cartao_conciliacao_indisponivel', 503, 'Não foi possível conferir o cadastro do cartão agora. Tente novamente em instantes.');
+    return { ok: true };
   }
 
   /**
@@ -219,6 +246,15 @@ export class PlanoController {
     }
   }
 
+  @Exige('settings.manage')
+  @Get('faturas/:id/autenticacao')
+  @Header('Cache-Control', 'no-store')
+  async autenticacao(@Staff() staff: AuthenticatedStaff,
+    @Param('id', new ZodValidationPipe(idSchema)) faturaId: string) {
+    try { return await prepararAutenticacaoDaCobranca({ tenantId: staff.tenantId, faturaId }); }
+    catch (erro) { return paraHttp(erro); }
+  }
+
   /** O extrato da barbearia. A RLS de `invoices` já o limita ao próprio tenant. */
   @Exige('settings.manage')
   @Get('faturas')
@@ -226,6 +262,7 @@ export class PlanoController {
     const faturas = await faturasDaBarbearia(staff.tenantId);
     return faturas.map((f) => ({
       id: f.id,
+      cobrancaEmCurso: f.estado === 'open' && f.chargeId !== null && modoDoAdquirente() === 'stripe',
       tipo: f.tipo,
       estado: f.estado,
       planoCode: f.planoCode,
@@ -278,6 +315,8 @@ export class PlanoController {
 
 const STATUS: Record<string, number> = {
   unknown_plan: 404,
+  unknown_invoice: 404,
+  stripe_autenticacao_indisponivel: 503,
   unknown_tenant: 404,
   inactive_plan: 409,
   same_plan: 409,

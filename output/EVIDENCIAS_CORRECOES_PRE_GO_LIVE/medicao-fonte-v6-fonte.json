@@ -1,0 +1,7 @@
+{
+  "fonte_igual_verify_v6": true,
+  "fonte_sha256": "23a0bbb74c8a422592ea40519106e904270d69adf90522ffd904456b67631255",
+  "medicao_exit_code": 0,
+  "medicao_log_sha256": "f3f5481d9fdff3c770cda93cb393b1db684b6ddc8d07b3c50c0b0af2e2bda50a",
+  "observacao": "Comparação após a medição. Nenhuma alteração de fonte de produto desde o início do verify v6; output é excluído da identidade."
+}

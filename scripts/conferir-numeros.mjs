@@ -100,18 +100,28 @@ bate(
 /**
  * O DRE e o painel **não somam a mesma coisa**, e a diferença é escrita.
  *
- * O DRE reconhece a receita do pacote no **consumo**, não na venda: é o que a
- * SPEC §4.7 manda, e sem isso o relatório mostraria um mês excelente seguido de
- * meses falsamente ruins. O painel soma a comanda paga. Então a conta que tem
- * que fechar é: bruto do DRE menos desconto = comanda paga + pacote
- * reconhecido. Se sobrar diferença, é defeito de verdade.
+ * O consumo de pacote já está na comanda paga, pelo valor da unidade usada.
+ * Somar package_uses novamente duplicava essa receita no conferidor. O DRE
+ * acrescenta a mensalidade paga e o saldo de pacote vencido; o consumo coberto
+ * por assinatura sai da soma, pois a mensalidade já reconheceu a receita.
  */
-const pacoteReconhecido = Number(
+const consumoDeAssinatura = Number(
   consultar(
-    `SELECT coalesce(sum(value_cents), 0) FROM package_uses
-      WHERE business_day BETWEEN '${mes}' AND '${fim}'`,
+    `SELECT coalesce(sum(p.amount_cents), 0) FROM order_payments p
+       JOIN orders o ON o.id=p.order_id
+      WHERE o.status='paid' AND p.method='assinatura'
+        AND o.business_day BETWEEN '${mes}' AND '${fim}'`,
   ),
 );
+const pacoteVencido = Number(consultar(`
+  SELECT coalesce(sum(greatest(cp.price_cents-coalesce(u.usado,0),0)),0)
+    FROM customer_packages cp
+    JOIN orders o ON o.id=cp.order_id JOIN locations l ON l.id=o.location_id
+    LEFT JOIN (SELECT customer_package_id,sum(value_cents) AS usado FROM package_uses GROUP BY 1) u
+      ON u.customer_package_id=cp.id
+   WHERE cp.refunded_at IS NULL AND cp.expires_at<=now()
+     AND (cp.expires_at AT TIME ZONE l.timezone)::date BETWEEN '${mes}' AND '${fim}'
+`));
 /**
  * E a mensalidade do clube, que também não passa pela comanda.
  *
@@ -121,8 +131,9 @@ const pacoteReconhecido = Number(
  */
 const assinaturaReconhecida = Number(
   consultar(
-    `SELECT coalesce(sum(amount_cents), 0) FROM club_invoices
-      WHERE status = 'paga' AND (paid_at AT TIME ZONE 'UTC')::date BETWEEN '${mes}' AND '${fim}'`,
+    `SELECT coalesce(sum(f.amount_cents), 0) FROM club_invoices f
+       JOIN club_subscriptions s ON s.id=f.subscription_id JOIN locations l ON l.id=s.location_id
+      WHERE f.status = 'paga' AND (f.paid_at AT TIME ZONE l.timezone)::date BETWEEN '${mes}' AND '${fim}'`,
   ),
 );
 bate(
@@ -130,7 +141,7 @@ bate(
   { quem: 'o DRE', valor: dre.atual.receitaBrutaCents - dre.atual.descontosCents },
   {
     quem: 'a soma dos três',
-    valor: (painel.faturamentoCents?.valor ?? 0) + pacoteReconhecido + assinaturaReconhecida,
+    valor: painel.faturamentoCents.valor - consumoDeAssinatura + pacoteVencido + assinaturaReconhecida,
   },
 );
 
@@ -247,7 +258,7 @@ if (comPontos) {
 // 6 — o estoque, na tela e na soma dos movimentos
 // ---------------------------------------------------------------------------
 
-const estoque = await chamar('/v1/admin/estoque/produtos', gerente).catch(() => null);
+const estoque = await chamar('/v1/admin/estoque/produtos', gerente);
 if (estoque?.produtos?.length) {
   const primeiro = estoque.produtos[0];
   const noBancoSaldo = Number(

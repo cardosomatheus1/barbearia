@@ -1,45 +1,21 @@
 #!/usr/bin/env bash
 # Sobe sozinho, a cada commit novo na branch padrão.
 #
-#   deploy/auto-atualizar.sh --ligar                    # de 5 em 5 minutos
-#   deploy/auto-atualizar.sh --ligar --exigir-esteira   # ...só com o CI verde
+#   deploy/auto-atualizar.sh --ligar                    # de 5 em 5 min, CI obrigatório
 #   deploy/auto-atualizar.sh --desligar
 #   deploy/auto-atualizar.sh                            # roda uma vez, agora
 #
-# ## O padrão é subir sem perguntar ao CI, e isso tem um custo escrito
-#
-# Esperar o verde do GitHub Actions é melhor **quando a esteira roda**. Quando
-# ela está desligada ou bloqueada na conta, exigir o verde vira "nunca sobe" —
-# e um deploy que nunca acontece é pior que um deploy sem rede.
-#
-# Então o padrão é: commit novo, sobe. E como não há portão do lado de fora, a
-# rede de segurança tem que estar **aqui dentro**, em três camadas:
-#
-# 1. `atualizar.sh` tira backup **antes** de migrar, e para se a migração
-#    falhar — sem subir nada, com a versão anterior servindo.
-# 2. Se a versão nova não responder, este script **volta sozinho** para a
-#    anterior. Sem isso, "automático" significaria o site passar a noite fora do
-#    ar por um commit que ninguém conferiu.
-# 3. O commit que falhou é anotado e **nunca é tentado de novo**. Sem essa
-#    memória, o laço seria: sobe, quebra, volta, sobe de novo cinco minutos
-#    depois — o site piscando a cada volta do cron, para sempre.
-#
-# Quando a esteira voltar a rodar, `--ligar --exigir-esteira` troca isso pelo
-# comportamento mais seguro: só sobe commit aprovado.
-#
-# ## Por que perguntar, e não receber um webhook
-#
-# Webhook exigiria guardar uma chave do servidor no GitHub e abrir um endereço
-# que aceita chamada de fora. Perguntando de dentro não há segredo guardado em
-# lugar nenhum nem porta nova: o servidor continua com 80 e 443 e mais nada.
+# O portão é obrigatório: os dois jobs do workflow portao.yml precisam passar
+# para o SHA que será implantado. Ausência, skip e falha bloqueiam a atualização.
 set -euo pipefail
 
 DESTINO="${DESTINO:-/opt/barbearia}"
 REPO_API="${REPO_API:-https://api.github.com/repos/cardosomatheus1/barbearia}"
 LOG="${AUTO_LOG:-/var/log/barbearia-deploy.log}"
-TRAVA="/var/lock/barbearia-auto-atualizar.lock"
+TRAVA="${AUTO_TRAVA:-/var/lock/barbearia-auto-atualizar.lock}"
 FALHOS="$DESTINO/.commits-que-falharam"
-EXIGIR_ESTEIRA="${EXIGIR_ESTEIRA:-0}"
+EXIGIR_ESTEIRA="${EXIGIR_ESTEIRA:-1}"
+[ "$EXIGIR_ESTEIRA" = 1 ] || { echo "Não é permitido desativar o portão" >&2; exit 1; }
 
 registrar() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" | tee -a "$LOG"; }
 
@@ -48,21 +24,16 @@ registrar() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" | tee -a "$
 CRON_MARCA="barbearia-auto-atualizar"
 case "${1:-}" in
   --ligar)
-    exigir=0
-    [ "${2:-}" = "--exigir-esteira" ] && exigir=1
-    linha="*/5 * * * * DESTINO=$DESTINO EXIGIR_ESTEIRA=$exigir $DESTINO/deploy/auto-atualizar.sh >> $LOG 2>&1 # $CRON_MARCA"
-    ( crontab -l 2>/dev/null | grep -v "$CRON_MARCA"; echo "$linha" ) | crontab -
-    if [ "$exigir" = 1 ]; then
-      echo "ligado: a cada 5 minutos, e só com a esteira verde."
-    else
-      echo "ligado: a cada 5 minutos, a cada commit novo."
-      echo "sem portão do lado de fora — se a versão nova não responder, ele volta sozinho."
-    fi
+    linha="*/5 * * * * DESTINO=$DESTINO EXIGIR_ESTEIRA=1 $DESTINO/deploy/auto-atualizar.sh >> $LOG 2>&1 # $CRON_MARCA"
+    # Ausência de crontab/entrada é normal. Sob pipefail ela abortava antes
+    # do echo e instalava um crontab vazio na primeira ativação.
+    ( crontab -l 2>/dev/null | grep -v "$CRON_MARCA" || true; echo "$linha" ) | crontab -
+    echo "ligado: a cada 5 minutos, e só com a esteira verde."
     echo "para acompanhar:  tail -f $LOG"
     exit 0
     ;;
   --desligar)
-    ( crontab -l 2>/dev/null | grep -v "$CRON_MARCA" ) | crontab -
+    ( crontab -l 2>/dev/null | grep -v "$CRON_MARCA" || true ) | crontab -
     echo "desligado. As atualizações voltam a ser $DESTINO/deploy/atualizar.sh na mão."
     exit 0
     ;;
@@ -103,44 +74,28 @@ if [ -f "$FALHOS" ] && grep -qx "$LA" "$FALHOS"; then
   exit 0
 fi
 
-# -- a esteira, quando se pede por ela ---------------------------------------
-if [ "$EXIGIR_ESTEIRA" = "1" ]; then
-  # O GitHub Actions produz **check runs**, não os "statuses" da API antiga. Um
-  # commit recém-empurrado costuma ter zero por alguns segundos: isso é "ainda
-  # não começou", não "não tem teste" — e tratá-lo como aprovado subiria
-  # justamente o commit que ninguém conferiu.
-  VEREDITO="$(api "$REPO_API/commits/$LA/check-runs" | python3 -c '
-import sys, json
-d = json.load(sys.stdin)
-runs = d.get("check_runs", [])
-if not runs:
-    print("sem_esteira"); raise SystemExit
-if any(r.get("status") != "completed" for r in runs):
-    print("rodando"); raise SystemExit
-ruins = [r["name"] for r in runs if r.get("conclusion") not in ("success", "neutral", "skipped")]
-print("reprovado:" + ", ".join(ruins) if ruins else "aprovado")
-' 2>/dev/null || echo erro)"
-
-  case "$VEREDITO" in
-    aprovado) ;;
-    rodando|sem_esteira) exit 0 ;;
-    reprovado:*)
-      if ! grep -qx "$LA" "$FALHOS" 2>/dev/null; then
-        echo "$LA" >> "$FALHOS"
-        registrar "${LA:0:7} NÃO subiu — a esteira reprovou (${VEREDITO#reprovado:}). Continuo em ${AQUI:0:7}."
-      fi
-      exit 0
-      ;;
-    *) registrar "não consegui ler o resultado da esteira; tento de novo"; exit 0 ;;
-  esac
+# Falha de CI não grava o SHA como deploy falho: a reexecução legítima pode
+# aprová-lo depois. Só uma tentativa de implantação falha vai para FALHOS.
+if ! node "$DESTINO/deploy/verificar-esteira.mjs" "$LA" "$BRANCH" >> "$LOG" 2>&1; then
+  registrar "${LA:0:7} aguarda aprovação dos dois jobs obrigatórios"
+  exit 0
 fi
 
 # -- sobe --------------------------------------------------------------------
 
 registrar "${AQUI:0:7} → ${LA:0:7} — atualizando"
 
-if DESTINO="$DESTINO" "$DESTINO/deploy/atualizar.sh" >> "$LOG" 2>&1; then
+if DESTINO="$DESTINO" DEPLOY_SHA="$LA" "$DESTINO/deploy/atualizar.sh" >> "$LOG" 2>&1; then
   registrar "${LA:0:7} no ar"
+  exit 0
+else
+  resultado=$?
+fi
+
+# O segundo exame pode encontrar uma reexecução de CI iniciada entre as
+# consultas. Ainda não houve implantação: não bloquear este SHA nem voltar.
+if [ "$resultado" = 78 ]; then
+  registrar "${LA:0:7} voltou a aguardar o portão; implantação não iniciada"
   exit 0
 fi
 
@@ -152,9 +107,8 @@ fi
 #   - a versão nova subiu e não responde: aí sim, volta.
 echo "$LA" >> "$FALHOS"
 
-DOMINIO_NO_ENV="$(grep -E '^DOMINIO=' .env | cut -d= -f2 | tr -d '"' || true)"
-if [ -n "$DOMINIO_NO_ENV" ] && curl -fsS --max-time 10 "https://$DOMINIO_NO_ENV/" > /dev/null 2>&1; then
-  registrar "FALHOU ao atualizar para ${LA:0:7}, mas o site responde. Nada foi revertido — veja o log acima."
+if DESTINO="$DESTINO" node "$DESTINO/deploy/verificar-prontidao.mjs" "$AQUI" > /dev/null 2>&1; then
+  registrar "FALHOU ao atualizar para ${LA:0:7}, mas a pilha anterior está pronta. Veja o log."
   exit 1
 fi
 

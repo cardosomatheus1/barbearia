@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { getPrisma } from '@barbearia/db';
 import { FORA_DO_LIMITE } from './throttler.config.js';
@@ -92,13 +92,15 @@ export class HealthController {
   }
 
   @Get('pronto')
-  pronto(): Promise<SondaPronto> {
-    return estadoDePronto(
+  async pronto(): Promise<SondaPronto> {
+    const estado = await estadoDePronto(
       () => getPrisma().$queryRaw<{ bypass_rls: boolean }[]>`
-        SELECT rolbypassrls AS bypass_rls
+        SELECT (rolsuper OR rolbypassrls) AS bypass_rls
         FROM pg_roles
         WHERE rolname = current_user
       `,
     );
+    if (estado.status !== 'ok') throw new ServiceUnavailableException(estado);
+    return estado;
   }
 }

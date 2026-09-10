@@ -105,14 +105,14 @@ describeIfDb('reserva', () => {
     now: AGORA,
   };
 
-  const slotsFor = async (professionalId: string, date = TERCA): Promise<string[]> => {
+  const slotsFor = async (professionalId: string, date = TERCA, now = AGORA): Promise<string[]> => {
     const result = await getAvailability({
       tenantId: TENANT,
       locationId: LOCATION,
       serviceIds: [CABELO],
       date,
       professionalId,
-      now: AGORA,
+      now,
     });
     return result.slots.map((slot) => slot.start);
   };
@@ -679,10 +679,12 @@ describeIfDb('reserva', () => {
 
   it('hold expirado não bloqueia', async () => {
     const hold = await holdSlot({ ...base, ttlSeconds: 1 });
-    await admin.$executeRawUnsafe(
-      `UPDATE slot_holds SET expires_at = now() - interval '1 second' WHERE id = '${hold.id}'`,
-    );
-    expect(await slotsFor(RUAN)).toContain('09:00');
+    expect(hold.expiresAt).toBe(new Date(AGORA.getTime() + 1_000).toISOString());
+    expect(await slotsFor(RUAN)).not.toContain('09:00');
+    // Criação e leitura usam o mesmo relógio; now() do banco comparava
+    // setembro real com agosto simulado e nunca exercitava a expiração.
+    const depoisDoPrazo = new Date(AGORA.getTime() + 2_000);
+    expect(await slotsFor(RUAN, TERCA, depoisDoPrazo)).toContain('09:00');
   });
 
   // -- cancelamento ----------------------------------------------------------

@@ -1,0 +1,10 @@
+{
+  "name": "rollback-dados-catalogo",
+  "command": [
+    "bash",
+    "scripts/ensaio-de-rollback.sh"
+  ],
+  "started_utc": "2026-09-10T05:11:09.028152+00:00",
+  "duration_seconds": 35.72,
+  "exit_code": 0
+}

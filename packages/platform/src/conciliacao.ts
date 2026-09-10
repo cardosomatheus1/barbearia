@@ -1,6 +1,6 @@
 import { semTenant, type TransactionClient } from '@barbearia/db';
 import { PlataformaError, registrarNaTrilha } from './plataforma.js';
-import { faturasEmCobranca, pagarFaturaNaTransacao } from './cobranca.js';
+import { percorrerFaturasEmCobranca, pagarFaturaNaTransacao } from './cobranca.js';
 import { EstornoRecusado, type EstadoDaCobranca, type PspProvider } from './psp.js';
 
 /**
@@ -119,6 +119,8 @@ export async function aplicarEvento(evento: EventoDoPsp): Promise<DesfechoDoEven
            AND psp_charge_id = ${evento.chargeId}
       `;
       if (alteradas === 1) {
+        await tx.$executeRaw`UPDATE invoice_charge_attempts SET state='refused', updated_at=now()
+          WHERE invoice_id=${alvo.id}::uuid AND charge_id=${evento.chargeId}`;
         await registrarNaTrilha(tx, null, alvo.tenant_id, 'invoice.charge_failed', {
           faturaId: alvo.id,
           chargeId: evento.chargeId,
@@ -157,6 +159,7 @@ const TIPO_DE: Readonly<Record<EstadoDaCobranca, TipoDeEvento>> = {
 };
 
 export interface ResultadoDaConciliacao {
+  readonly falhas: number;
   readonly consultadas: number;
   readonly pagas: number;
   readonly recusadas: number;
@@ -178,16 +181,17 @@ export interface ResultadoDaConciliacao {
 export async function conciliarPendentes(entrada: {
   readonly provider: PspProvider;
 }): Promise<ResultadoDaConciliacao> {
-  const abertas = (await faturasEmCobranca()).filter((f) => f.chargeId !== null);
-  const contagem = { consultadas: 0, pagas: 0, recusadas: 0 };
+  const contagem = { consultadas: 0, pagas: 0, recusadas: 0, falhas: 0 };
 
-  for (const fatura of abertas) {
+  for await (const fatura of percorrerFaturasEmCobranca()) {
     const chargeId = fatura.chargeId;
     if (!chargeId) continue;
 
     // Fora de transação, como toda ida ao adquirente: segurar conexão de banco
     // esperando rede é o jeito clássico de esgotar o pool.
-    const estado = await entrada.provider.consultar(chargeId);
+    let estado: EstadoDaCobranca;
+    try { estado = await entrada.provider.consultar(chargeId); }
+    catch { contagem.falhas += 1; continue; }
     contagem.consultadas += 1;
     if (estado === 'pendente') continue;
 

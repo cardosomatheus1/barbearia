@@ -4,6 +4,7 @@ import { errosDaConfiguracaoDeProducao } from './verificar-configuracao-producao
 
 const BASE = {
   NODE_ENV: 'production',
+  INTERNAL_PROXY_SECRET: 'segredo-interno-de-teste-0123456789abcdef',
   STAFF_EMAIL_PEPPER: 'staff-email-pepper-0123456789abcdef',
   OTP_PEPPER: 'otp-pepper-seguro-0123456789abcdef',
   API_KEY_PEPPER: 'api-key-pepper-0123456789abcdef0123456789',
@@ -63,18 +64,28 @@ test('mensageria Meta valida id do número e nomes de template', () => {
 });
 
 test('segredos de identidade fracos são recusados', () => {
+  assert.match(erros({ INTERNAL_PROXY_SECRET: 'curto' }).join('\n'), /INTERNAL_PROXY_SECRET/);
   assert.match(erros({ STAFF_EMAIL_PEPPER: 'curto' }).join('\n'), /STAFF_EMAIL_PEPPER/);
   assert.match(erros({ OTP_PEPPER: 'curto' }).join('\n'), /OTP_PEPPER/);
   assert.match(erros({ API_KEY_PEPPER: 'curto' }).join('\n'), /API_KEY_PEPPER/);
   assert.match(erros({ MFA_SECRET_KEY: 'curto' }).join('\n'), /MFA_SECRET_KEY/);
 });
 test('fake de cobrança não sobe em produção', () => assert.match(erros({ PSP_MODO: 'fake' }).join('\n'), /PSP_MODO=fake/));
+test('Stripe do SaaS não pode ser configurada para receber comandas', () => {
+  assert.match(erros({ COMANDA_PSP_MODO: 'stripe' }).join('\n'), /COMANDA_PSP_MODO/);
+  assert.match(erros({ COMANDA_PSP_MODO: 'fake' }).join('\n'), /COMANDA_PSP_MODO/);
+});
 test('Stripe exige chave e webhook', () => {
   const e = erros({ PSP_MODO: 'stripe' }).join('\n');
   assert.match(e, /STRIPE_SECRET_KEY/); assert.match(e, /STRIPE_WEBHOOK_SECRET/);
 });
 test('Stripe rejeita chave de teste em produção', () => assert.match(erros({ PSP_MODO: 'stripe', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_x' }).join('\n'), /STRIPE_SECRET_KEY.*teste/i));
 test('fiscal fake não sobe em produção', () => assert.match(erros({ FISCAL_MODO: 'fake' }).join('\n'), /FISCAL_MODO=fake/));
+test('emissor fiscal próprio exige chave dedicada e aceita somente formato canônico', () => {
+  assert.match(erros({ FISCAL_MODO: 'nacional' }).join('\n'), /FISCAL_SECRET_KEY/);
+  assert.match(erros({ FISCAL_MODO: 'nacional', FISCAL_SECRET_KEY: 'invalida' }).join('\n'), /FISCAL_SECRET_KEY/);
+  assert.deepEqual(erros({ FISCAL_MODO: 'nacional', FISCAL_SECRET_KEY: Buffer.alloc(32, 31).toString('base64') }), []);
+});
 test('S3 incompleto é recusado', () => assert.match(erros({ MEDIA_STORAGE: 's3' }).join('\n'), /MEDIA_S3_ENDPOINT/));
 test('S3 HTTP exige decisão explícita', () => {
   const e = erros({ MEDIA_STORAGE: 's3', MEDIA_S3_ENDPOINT: 'http://minio:9000', MEDIA_S3_BUCKET: 'b', MEDIA_S3_ACCESS_KEY_ID: 'a', MEDIA_S3_SECRET_ACCESS_KEY: 's' }).join('\n');
@@ -107,4 +118,16 @@ test('Turnstile não aceita localhost na lista de produção', () =>
 test('WEB_URL público exige HTTPS e não localhost', () => {
   assert.match(erros({ WEB_URL: 'http://localhost:3001' }).join('\n'), /https/);
   assert.match(erros({ WEB_URL: 'http://localhost:3001' }).join('\n'), /localhost/);
+});
+
+test('Baileys exige chave canônica de 32 bytes quando ativado', () => {
+  assert.match(erros({ BAILEYS_HABILITADO:'1' }).join('\n'), /WHATSAPP_TOKEN_KEY/);
+  assert.match(erros({ BAILEYS_HABILITADO:'1',WHATSAPP_TOKEN_KEY:'curto' }).join('\n'), /WHATSAPP_TOKEN_KEY/);
+  assert.deepEqual(erros({ BAILEYS_HABILITADO:'1',WHATSAPP_TOKEN_KEY:Buffer.alloc(32,17).toString('base64') }),[]);
+  assert.match(erros({ BAILEYS_HABILITADO:'sim' }).join('\n'), /BAILEYS_HABILITADO/);
+});
+test('Stripe exige chave pública de produção para a confirmação bancária', () => {
+  const stripe={ PSP_MODO:'stripe',STRIPE_SECRET_KEY:'sk_live_sintetico',STRIPE_WEBHOOK_SECRET:'whsec_sintetico' };
+  assert.match(erros(stripe).join('\n'), /STRIPE_PUBLISHABLE_KEY/);
+  assert.deepEqual(erros({ ...stripe,STRIPE_PUBLISHABLE_KEY:'pk_live_sintetico' }),[]);
 });

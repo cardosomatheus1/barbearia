@@ -107,6 +107,12 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
    * tabela não responde nada para ele.
    */
   'fiscal.settings_changed': 'mexeu no cadastro fiscal da casa',
+  'fiscal.native_settings_changed': 'configurou o emissor nacional de NFS-e',
+  'fiscal.certificate_changed': 'atualizou o certificado fiscal A1',
+  'fiscal.certificate_removed': 'removeu o certificado fiscal A1',
+  'fiscal.xml_downloaded': 'baixou o XML de uma nota fiscal',
+  'fiscal.pdf_downloaded': 'baixou o PDF de uma nota fiscal',
+  'fiscal.cancellation_requested': 'solicitou o cancelamento de uma nota fiscal',
   'fiscal.invoice_cancelled': 'cancelou uma nota fiscal',
   /**
    * Bloco 54. A frase diz que **mudou**, nunca para quê — a trilha guarda
@@ -118,6 +124,7 @@ export const FRASE_DO_EVENTO: Record<string, string> = {
   // pela primeira vez e para quem trocou o token depois.
   'whatsapp.settings_changed': 'mexeu no WhatsApp da casa',
   'whatsapp.template_submitted': 'mandou um texto para a Meta aprovar',
+  'whatsapp.local_text_changed': 'alterou uma mensagem do WhatsApp por QR',
   'automation.changed': 'mexeu numa automação de mensagem',
   'campaign.created': 'criou uma campanha',
   // Separada da criação porque são duas decisões: montar o público é

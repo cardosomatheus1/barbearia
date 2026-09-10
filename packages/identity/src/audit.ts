@@ -152,6 +152,12 @@ export type AuditAction =
    * cliente?" — são de quem administra a casa, não de quem tem `finance.view`.
    */
   | 'fiscal.settings_changed'
+  | 'fiscal.native_settings_changed'
+  | 'fiscal.certificate_changed'
+  | 'fiscal.certificate_removed'
+  | 'fiscal.xml_downloaded'
+  | 'fiscal.pdf_downloaded'
+  | 'fiscal.cancellation_requested'
   | 'fiscal.invoice_cancelled'
   /**
    * O CPF do tomador entrando ou saindo do cadastro (bloco 54).
@@ -171,6 +177,7 @@ export type AuditAction =
    */
   | 'whatsapp.settings_changed'
   | 'whatsapp.template_submitted'
+  | 'whatsapp.local_text_changed'
   /** Ligar ou desligar o que a casa manda sozinha para a base (bloco 56). */
   | 'automation.changed'
   /** Uma campanha criada, com o tamanho do público (bloco 57). */
@@ -486,10 +493,17 @@ export const ACOES_DE_GESTAO: readonly AuditAction[] = [
   'import.reverted',
   'slug.added',
   'fiscal.settings_changed',
+  'fiscal.native_settings_changed',
+  'fiscal.certificate_changed',
+  'fiscal.certificate_removed',
+  'fiscal.xml_downloaded',
+  'fiscal.pdf_downloaded',
+  'fiscal.cancellation_requested',
   'fiscal.invoice_cancelled',
   'customers.tax_id_changed',
   'whatsapp.settings_changed',
   'whatsapp.template_submitted',
+  'whatsapp.local_text_changed',
   'automation.changed',
   'campaign.created',
   'campaign.sent',

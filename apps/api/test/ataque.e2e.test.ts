@@ -5,7 +5,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleMessagingProvider } from '@barbearia/identity';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { CatalogoController } from '../src/admin/catalogo.controller.js';
@@ -17,6 +17,7 @@ import { AvaliacaoController } from '../src/admin/avaliacao.controller.js';
 import { MetricaController } from '../src/admin/metrica.controller.js';
 import { CaixaController } from '../src/admin/caixa.controller.js';
 import { WhatsAppController } from '../src/admin/whatsapp.controller.js';
+import { WhatsAppConexaoController } from '../src/admin/whatsapp-conexao.controller.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
 import { BookingController } from '../src/booking/booking.controller.js';
@@ -103,6 +104,7 @@ describeIfDb('ataque: o que o produto precisa recusar', () => {
         MetricaController,
         CaixaController,
         WhatsAppController,
+        WhatsAppConexaoController,
         BookingController,
         AuthController,
       ],
@@ -137,6 +139,44 @@ describeIfDb('ataque: o que o produto precisa recusar', () => {
 
   const http = () => request(app.getHttpServer());
   const com = (token: string) => (req: request.Test) => req.set('Authorization', `Bearer ${token}`);
+
+  it('conexão Baileys exige permissão, isola unidade e mantém texto local sem aprovação Meta', async () => {
+    vi.stubEnv('BAILEYS_HABILITADO', '1');
+    vi.stubEnv('WHATSAPP_TOKEN_KEY', Buffer.alloc(32, 37).toString('base64'));
+    try {
+      const dono = await abrirBarbearia(); const vizinho = await abrirBarbearia(VIZINHA);
+      const recepcao = await recepcionista(dono);
+      const path = '/v1/admin/whatsapp/conexao';
+      await http().get(path).expect(401);
+      await com(recepcao.token)(http().get(path)).expect(403);
+      await com(dono)(http().put(path).send({ canal: 'baileys', tenantId: 'outro' })).expect(400);
+      await com(dono)(http().put(path).send({ canal: 'baileys' })).expect(200);
+      await com(dono)(http().post(`${path}/baileys/parear`)).expect(201);
+      const status = await com(dono)(http().get(path)).expect(200);
+      expect(status.headers['cache-control']).toBe('no-store');
+      expect(status.body.canal).toBe('baileys'); expect(status.body.baileys.estado).toBe('aguardando_qr');
+      expect(status.body.baileys).not.toHaveProperty('owner_token');
+      expect(status.body.baileys).not.toHaveProperty('generation');
+      const rival = await com(vizinho)(http().get(path)).expect(200);
+      expect(rival.body.canal).toBe('meta'); expect(rival.body.baileys.estado).toBe('desconectado');
+      const texto = { titulo: 'Convite', tipo: 'retorno', corpo: 'Olá {{1}}, venha à {{2}}.', habilitado: true };
+      await com(dono)(http().post(`${path}/baileys/textos`).send({ ...texto, corpo: 'Olá {{9}}.' })).expect(400);
+      const criado = await com(dono)(http().post(`${path}/baileys/textos`).send(texto)).expect(201);
+      const id = String(criado.body.id);
+      await com(vizinho)(http().put(`${path}/baileys/textos/${id}`).send(texto)).expect(404);
+      await com(recepcao.token)(http().put(`${path}/baileys/textos/${id}`).send(texto)).expect(403);
+      const lista = await com(dono)(http().get('/v1/admin/whatsapp/templates')).expect(200);
+      expect(lista.body.templates.find((t: { id: string }) => t.id === id)).toMatchObject({ canal: 'baileys', disponivel: true, estado: 'rascunho' });
+      await com(dono)(http().put(`${path}/baileys/textos/${id}`).send({ ...texto, habilitado: false })).expect(200);
+      const semTexto = await com(dono)(http().get('/v1/admin/whatsapp/templates')).expect(200);
+      expect(semTexto.body.templates.find((t: { id: string }) => t.id === id).disponivel).toBe(false);
+      await com(dono)(http().delete(`${path}/baileys`)).expect(200);
+      const removido = await com(dono)(http().get(path)).expect(200);
+      expect(removido.body.baileys.estado).toBe('desconectado');
+      vi.stubEnv('BAILEYS_HABILITADO', '0');
+      await com(dono)(http().post(`${path}/baileys/parear`)).expect(503);
+    } finally { vi.unstubAllEnvs(); }
+  });
 
   async function abrirBarbearia(conta = CASA): Promise<string> {
     await http().post('/v1/admin/signup').send(conta).expect(202);

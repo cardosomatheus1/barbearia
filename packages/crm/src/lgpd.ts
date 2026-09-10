@@ -1,3 +1,4 @@
+import { conteudoDoEnvio, type EnvioBaileys } from './baileys/outbox.js';
 import { withTenant, type TransactionClient } from '@barbearia/db';
 import { audit } from '@barbearia/identity';
 import { anonimizarCliente } from './anonimizacao.js';
@@ -189,6 +190,7 @@ export async function consentimentosDoCliente(
 // ---------------------------------------------------------------------------
 
 export interface DadosDoTitular {
+  readonly whatsappBaileys: readonly Record<string, unknown>[];
   readonly geradoEm: string;
   readonly barbearia: { readonly nome: string; readonly encarregado: string | null };
   readonly cadastro: Record<string, unknown>;
@@ -554,9 +556,15 @@ export async function exportarDadosDoTitular(
        ORDER BY sent_at
     `;
 
+    const saidasBaileys = await tx.$queryRaw<(EnvioBaileys & { created_at: Date; accepted_at: Date | null })[]>`
+      SELECT * FROM whatsapp_baileys_outbox WHERE customer_id = ${customerId}::uuid AND payload_cipher IS NOT NULL ORDER BY created_at`;
+    const whatsappBaileys = saidasBaileys.map(r => ({ preparada_em: r.created_at, enviada_em: r.accepted_at,
+      estado: r.status, texto: conteudoDoEnvio({ tenantId, locationId: r.location_id }, r).texto }));
+
     const preferencia = preferencias[0] ?? null;
 
     return {
+      whatsappBaileys,
       whatsappRecebidas: mensagensRecebidas,
       whatsappEnviadas: mensagensEnviadas,
       geradoEm: agora.toISOString(),

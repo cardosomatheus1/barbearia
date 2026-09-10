@@ -59,6 +59,17 @@ const lancamento = (
 });
 
 describe('rateio do desconto', () => {
+  it('valores grandes preservam o maior resto sem empate falso de ponto flutuante',()=>{
+    const itens=[item({id:'a',totalCents:933816783}),item({id:'b',totalCents:821400452})];
+    for(const ordem of [itens,[...itens].reverse()]) {
+      const rateio=ratearDesconto({itens:ordem,descontoCents:1350908579});
+      // Resto de b é maior por uma unidade no denominador inteiro. Em float
+      // os restos empatavam e o desempate por valor entregava um centavo a a.
+      expect(rateio.get('a')).toBe(718715084);
+      expect(rateio.get('b')).toBe(632193495);
+      expect([...rateio.values()].reduce((a,b)=>a+b,0)).toBe(1350908579);
+    }
+  });
   it('divide proporcional ao valor de cada item', () => {
     // Corte 40 do Ruan e barba 60 do Gleidson, com 10 de desconto: 4 e 6.
     const rateio = ratearDesconto({

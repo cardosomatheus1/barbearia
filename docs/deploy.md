@@ -32,6 +32,11 @@ do art. 41 §1).
 
 ## 2. O DNS, antes de tudo
 
+Os scripts de instalação, atualização e rollback exigem Node.js 22 ou superior
+no host, além do Docker. Confira `node --version` antes de iniciar; a imagem da
+aplicação possuir Node não instala o runtime no servidor. O instalador recusa
+a execução quando esse pré-requisito falta.
+
 No painel do domínio, um registro:
 
 ```
@@ -64,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/cardosomatheus1/barbearia/claude/ba
 > lista paralela de sempre, e quebraria no dia em que alguém renomeasse.
 
 Ele instala o Docker se faltar, clona o repositório em `/opt/barbearia`, **gera
-os segredos obrigatórios**, aplica as 119 migrações, sobe os cinco serviços, espera o
+os segredos obrigatórios**, aplica as 127 migrações, sobe os cinco serviços, espera o
 site responder e agenda o backup diário.
 
 Roda de novo sem estragar nada: os segredos já gerados são preservados. Não é
@@ -130,16 +135,19 @@ algo, e ela perde o que foi escrito depois do dump. Está medida em
 ## 5.1 Atualizar sozinho
 
 ```bash
-deploy/auto-atualizar.sh --ligar       # a cada 5 min, a cada commit novo
+deploy/auto-atualizar.sh --ligar       # a cada 5 min, após aprovação do CI
 deploy/auto-atualizar.sh --desligar
 tail -f /var/log/barbearia-deploy.log  # o que ele fez
 ```
 
-Ele pergunta ao GitHub se a branch padrão andou. Andou, sobe — pelo mesmo
-`atualizar.sh` de sempre, com backup antes de migrar.
+Ele consulta a branch padrão e exige sucesso dos dois jobs de `portao.yml`:
+`pnpm verify` e `pilha, navegador e cargas`. Ambos precisam pertencer ao SHA
+solicitado, na execução mais recente. Job ausente, pulado, pendente ou falho
+impede a atualização. O deploy manual aplica o mesmo portão.
 
-**Sem portão do lado de fora, a rede de segurança fica aqui dentro**, em três
-camadas:
+O SHA aprovado é fixado em `DEPLOY_SHA`; avanço da branch durante o build não
+troca o código implantado. Backup continua vindo antes de migrar. As proteções
+locais continuam valendo:
 
 1. a migração falha → `atualizar.sh` para antes de trocar a imagem, e o site
    nunca sai do ar;
@@ -149,15 +157,55 @@ camadas:
    laço seria sobe, quebra, volta, sobe de novo em cinco minutos, com o site
    piscando a cada volta do cron.
 
-Quando o GitHub Actions estiver rodando na conta, `--ligar --exigir-esteira`
-troca isso pelo mais seguro: só sobe commit que a esteira aprovou. Enquanto a
-esteira não roda, exigir o verde significaria **nunca subir** — e um deploy que
-nunca acontece é pior que um deploy sem rede.
+`--exigir-esteira` permanece aceito por compatibilidade; a exigência já é
+obrigatória. `EXIGIR_ESTEIRA=0` é recusado. Se uma reexecução do CI começar entre
+as consultas, o deploy aguarda outra rodada e não marca o commit como defeituoso.
+
+A instalação inicial exige o mesmo portão e verifica a pilha completa antes de
+anunciar sucesso. Executar o instalador sobre uma instalação com `.env` delega
+para `atualizar.sh`, preservando o backup anterior à migração.
 
 **Não é webhook de propósito.** Webhook exigiria guardar uma chave do servidor
 no GitHub e abrir um endereço que aceita chamada de fora. Perguntando de dentro
 não há segredo guardado em lugar nenhum nem porta nova: continua 80 e 443 e mais
 nada. O custo é até cinco minutos de latência entre o push e o ar.
+
+### Prontidão e compatibilidade da volta
+
+Atualização e rollback verificam API, conexão restrita ao banco, RLS, leitura de
+domínio, web e rodada recente do worker, além do endereço público. API e worker
+precisam informar o SHA esperado em `APP_VERSION`. Resposta da homepage sozinha
+não aprova o deploy.
+
+`INTERNAL_PROXY_SECRET` é gerada por `deploy/segredos.sh` e compartilhada somente
+entre Caddy, web e API. O Caddy substitui os cabeçalhos de origem; Next e API
+verificam a chave antes de aceitar o IP encaminhado. A atualização recria o
+Caddy para carregar a configuração e a chave novas.
+
+A primeira implantação destas sondas exige um ensaio de rollback específico:
+versões anteriores sem identificação de versão ou heartbeat do worker não
+satisfazem a nova verificação. O ensaio local de restauração não certifica essa
+volta no servidor. Reinícios manuais pelo compose precisam receber o mesmo
+`APP_VERSION` do release.
+
+### Migrações e bancos existentes
+
+O migrador mantém checksums SHA-256 e uma trava por banco. Recusa arquivos
+alterados após aplicação, histórico com lacunas e tentativa interrompida.
+Migrações transacionais gravam DDL e histórico juntos; alterações de enum que
+exigem autocommit deixam marcador até a conclusão. Uma interrupção exige
+diagnóstico e recuperação explícita, sem repetição automática.
+
+Banco preenchido sem histórico não é considerado migrado. Para uma adoção de
+legado revisada, `MIGRATION_ADOPT_THROUGH` recebe o nome exato do último arquivo
+SQL já aplicado. O serviço `preparar` usa `ADMIN_DATABASE_URL` para reconstruir
+um banco temporário e comparar schema e permissões. Divergência recusa a adoção.
+Remova o valor após o procedimento; nunca o use para contornar erro de migração.
+Faça backup e ensaie em cópia isolada antes de qualquer aplicação em produção.
+
+API e worker não recebem credenciais administrativas ou de backup; web não
+recebe credenciais de banco ou provedores. A imagem usa cliente PostgreSQL 16
+para comparar e restaurar o schema do servidor 16.
 
 ## 6. O backup
 

@@ -1,0 +1,6412 @@
+{
+  "commit": "3d90fc62de2947fda05aed32407d5a2f2852340b",
+  "routes": [
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 124,
+      "controller": "StaffAuthController",
+      "handler": "signup",
+      "verb": "POST",
+      "path": "/v1/admin/signup",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 177,
+      "controller": "StaffAuthController",
+      "handler": "login",
+      "verb": "POST",
+      "path": "/v1/admin/login",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 244,
+      "controller": "OnboardingController",
+      "handler": "logout",
+      "verb": "POST",
+      "path": "/v1/admin/logout",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 251,
+      "controller": "OnboardingController",
+      "handler": "state",
+      "verb": "GET",
+      "path": "/v1/admin/state",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 334,
+      "controller": "OnboardingController",
+      "handler": "templates",
+      "verb": "GET",
+      "path": "/v1/admin/templates",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 340,
+      "controller": "OnboardingController",
+      "handler": "business",
+      "verb": "PUT",
+      "path": "/v1/admin/business",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 371,
+      "controller": "OnboardingController",
+      "handler": "services",
+      "verb": "PUT",
+      "path": "/v1/admin/services",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 384,
+      "controller": "OnboardingController",
+      "handler": "professionals",
+      "verb": "PUT",
+      "path": "/v1/admin/professionals",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 401,
+      "controller": "OnboardingController",
+      "handler": "payments",
+      "verb": "PUT",
+      "path": "/v1/admin/payments",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 420,
+      "controller": "OnboardingController",
+      "handler": "lerNaVitrine",
+      "verb": "GET",
+      "path": "/v1/admin/vitrine",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 426,
+      "controller": "OnboardingController",
+      "handler": "definirNaVitrine",
+      "verb": "PUT",
+      "path": "/v1/admin/vitrine",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 436,
+      "controller": "OnboardingController",
+      "handler": "publicar",
+      "verb": "POST",
+      "path": "/v1/admin/publish",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 463,
+      "controller": "OnboardingController",
+      "handler": "photos",
+      "verb": "GET",
+      "path": "/v1/admin/photos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 480,
+      "controller": "OnboardingController",
+      "handler": "uploadPhoto",
+      "verb": "POST",
+      "path": "/v1/admin/photos/upload",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 561,
+      "controller": "OnboardingController",
+      "handler": "removeUploadedPhoto",
+      "verb": "DELETE",
+      "path": "/v1/admin/photos/upload",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 615,
+      "controller": "OnboardingController",
+      "handler": "savePhotos",
+      "verb": "PUT",
+      "path": "/v1/admin/photos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 665,
+      "controller": "OnboardingController",
+      "handler": "policies",
+      "verb": "GET",
+      "path": "/v1/admin/policies",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 674,
+      "controller": "OnboardingController",
+      "handler": "changeWindow",
+      "verb": "PUT",
+      "path": "/v1/admin/change-window",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/admin.controller.ts",
+      "line": 694,
+      "controller": "OnboardingController",
+      "handler": "recusas",
+      "verb": "GET",
+      "path": "/v1/admin/recusas-online",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/agenda.controller.ts",
+      "line": 141,
+      "controller": "AgendaController",
+      "handler": "espera",
+      "verb": "GET",
+      "path": "/v1/admin/agenda/espera",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/agenda.controller.ts",
+      "line": 167,
+      "controller": "AgendaController",
+      "handler": "tirarDaLista",
+      "verb": "DELETE",
+      "path": "/v1/admin/agenda/espera/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.cancel'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/agenda.controller.ts",
+      "line": 182,
+      "controller": "AgendaController",
+      "handler": "agenda",
+      "verb": "GET",
+      "path": "/v1/admin/agenda",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/agenda.controller.ts",
+      "line": 229,
+      "controller": "AgendaController",
+      "handler": "bloquear",
+      "verb": "POST",
+      "path": "/v1/admin/agenda/blocks",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.create'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/agenda.controller.ts",
+      "line": 284,
+      "controller": "AgendaController",
+      "handler": "excecao",
+      "verb": "POST",
+      "path": "/v1/admin/agenda/exceptions",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/agenda.controller.ts",
+      "line": 338,
+      "controller": "AgendaController",
+      "handler": "remover",
+      "verb": "DELETE",
+      "path": "/v1/admin/agenda/exceptions/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.create'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/agenda.controller.ts",
+      "line": 375,
+      "controller": "AgendaController",
+      "handler": "mover",
+      "verb": "POST",
+      "path": "/v1/admin/agenda/appointments/:id/move",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.reschedule'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/alertas.controller.ts",
+      "line": 33,
+      "controller": "AlertasController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/alertas/preferencias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/alertas.controller.ts",
+      "line": 39,
+      "controller": "AlertasController",
+      "handler": "salvar",
+      "verb": "PUT",
+      "path": "/v1/admin/alertas/preferencias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 128,
+      "controller": "AssinaturaController",
+      "handler": "lista",
+      "verb": "GET",
+      "path": "/v1/admin/clube/planos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 135,
+      "controller": "AssinaturaController",
+      "handler": "listaContada",
+      "verb": "GET",
+      "path": "/v1/admin/clube/planos/contados",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'",
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 141,
+      "controller": "AssinaturaController",
+      "handler": "criar",
+      "verb": "PUT",
+      "path": "/v1/admin/clube/planos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 168,
+      "controller": "AssinaturaController",
+      "handler": "editar",
+      "verb": "PUT",
+      "path": "/v1/admin/clube/planos/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 197,
+      "controller": "AssinaturaController",
+      "handler": "clube",
+      "verb": "GET",
+      "path": "/v1/admin/clube",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'",
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 203,
+      "controller": "AssinaturaController",
+      "handler": "doCliente",
+      "verb": "GET",
+      "path": "/v1/admin/clube/clientes/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'",
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 212,
+      "controller": "AssinaturaController",
+      "handler": "novaAssinatura",
+      "verb": "POST",
+      "path": "/v1/admin/clube/assinar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 249,
+      "controller": "AssinaturaController",
+      "handler": "lista_dependentes",
+      "verb": "GET",
+      "path": "/v1/admin/clube/:id/dependentes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 262,
+      "controller": "AssinaturaController",
+      "handler": "incluir",
+      "verb": "POST",
+      "path": "/v1/admin/clube/:id/dependentes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 281,
+      "controller": "AssinaturaController",
+      "handler": "remover",
+      "verb": "POST",
+      "path": "/v1/admin/clube/:id/dependentes/remover",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 300,
+      "controller": "AssinaturaController",
+      "handler": "cancelar",
+      "verb": "POST",
+      "path": "/v1/admin/clube/:id/cancelar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 330,
+      "controller": "AssinaturaController",
+      "handler": "faturas",
+      "verb": "GET",
+      "path": "/v1/admin/clube/faturas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 350,
+      "controller": "AssinaturaController",
+      "handler": "pagarFatura",
+      "verb": "POST",
+      "path": "/v1/admin/clube/faturas/:id/pagar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 371,
+      "controller": "AssinaturaController",
+      "handler": "anularFatura",
+      "verb": "POST",
+      "path": "/v1/admin/clube/faturas/:id/cancelar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 397,
+      "controller": "AssinaturaController",
+      "handler": "cartao",
+      "verb": "PUT",
+      "path": "/v1/admin/clube/:id/cartao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 423,
+      "controller": "AssinaturaController",
+      "handler": "agendarSaida",
+      "verb": "POST",
+      "path": "/v1/admin/clube/:id/agendar-cancelamento",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 457,
+      "controller": "AssinaturaController",
+      "handler": "simulacao",
+      "verb": "GET",
+      "path": "/v1/admin/clube/simulacao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'",
+        "'finance.view_profit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 477,
+      "controller": "AssinaturaController",
+      "handler": "rentabilidade",
+      "verb": "GET",
+      "path": "/v1/admin/clube/rentabilidade",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'",
+        "'finance.view_profit'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 502,
+      "controller": "AssinaturaController",
+      "handler": "modelo",
+      "verb": "PUT",
+      "path": "/v1/admin/clube/modelo",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'",
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/assinatura.controller.ts",
+      "line": 523,
+      "controller": "AssinaturaController",
+      "handler": "desfazerSaida",
+      "verb": "POST",
+      "path": "/v1/admin/clube/:id/desfazer-cancelamento",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.subscription_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/automacao.controller.ts",
+      "line": 55,
+      "controller": "AutomacaoController",
+      "handler": "fila",
+      "verb": "GET",
+      "path": "/v1/admin/automacoes/fila",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/automacao.controller.ts",
+      "line": 64,
+      "controller": "AutomacaoController",
+      "handler": "listar",
+      "verb": "GET",
+      "path": "/v1/admin/automacoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/automacao.controller.ts",
+      "line": 82,
+      "controller": "AutomacaoController",
+      "handler": "estado",
+      "verb": "PATCH",
+      "path": "/v1/admin/automacoes/estado",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/automacao.controller.ts",
+      "line": 101,
+      "controller": "AutomacaoController",
+      "handler": "salvar",
+      "verb": "PUT",
+      "path": "/v1/admin/automacoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/avaliacao.controller.ts",
+      "line": 86,
+      "controller": "AvaliacaoController",
+      "handler": "painel",
+      "verb": "GET",
+      "path": "/v1/admin/avaliacoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'reviews.view'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/avaliacao.controller.ts",
+      "line": 93,
+      "controller": "AvaliacaoController",
+      "handler": "doCliente",
+      "verb": "GET",
+      "path": "/v1/admin/avaliacoes/clientes/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'reviews.view'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/avaliacao.controller.ts",
+      "line": 110,
+      "controller": "AvaliacaoController",
+      "handler": "tratar",
+      "verb": "POST",
+      "path": "/v1/admin/avaliacoes/:id/tratar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'reviews.recover'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/avaliacao.controller.ts",
+      "line": 141,
+      "controller": "AvaliacaoController",
+      "handler": "contestar",
+      "verb": "POST",
+      "path": "/v1/admin/avaliacoes/:id/contestar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'reviews.contest'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/avaliacao.controller.ts",
+      "line": 178,
+      "controller": "AvaliacaoController",
+      "handler": "retirar",
+      "verb": "POST",
+      "path": "/v1/admin/avaliacoes/:id/retirar-contestacao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'reviews.contest'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/avisos.controller.ts",
+      "line": 26,
+      "controller": "AvisosController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/notifications",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [
+        "'avisos'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/avisos.controller.ts",
+      "line": 35,
+      "controller": "AvisosController",
+      "handler": "salvar",
+      "verb": "PUT",
+      "path": "/v1/admin/notifications",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [
+        "'avisos'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/board.controller.ts",
+      "line": 105,
+      "controller": "BoardController",
+      "handler": "day",
+      "verb": "GET",
+      "path": "/v1/admin/day",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/board.controller.ts",
+      "line": 142,
+      "controller": "BoardController",
+      "handler": "attendance",
+      "verb": "POST",
+      "path": "/v1/admin/appointments/:id/attendance",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.attend'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/board.controller.ts",
+      "line": 209,
+      "controller": "BoardController",
+      "handler": "catalog",
+      "verb": "GET",
+      "path": "/v1/admin/catalog",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.create'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/board.controller.ts",
+      "line": 224,
+      "controller": "BoardController",
+      "handler": "customers",
+      "verb": "GET",
+      "path": "/v1/admin/customers",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/board.controller.ts",
+      "line": 234,
+      "controller": "BoardController",
+      "handler": "availability",
+      "verb": "GET",
+      "path": "/v1/admin/availability",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.create'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/board.controller.ts",
+      "line": 276,
+      "controller": "BoardController",
+      "handler": "book",
+      "verb": "POST",
+      "path": "/v1/admin/appointments",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.create'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 159,
+      "controller": "CaixaController",
+      "handler": "caixa",
+      "verb": "GET",
+      "path": "/v1/admin/cash",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 172,
+      "controller": "CaixaController",
+      "handler": "abrir",
+      "verb": "POST",
+      "path": "/v1/admin/cash/open",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 192,
+      "controller": "CaixaController",
+      "handler": "movimentar",
+      "verb": "POST",
+      "path": "/v1/admin/cash/movements",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.withdraw'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 231,
+      "controller": "CaixaController",
+      "handler": "fechar",
+      "verb": "POST",
+      "path": "/v1/admin/cash/close",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.close'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 269,
+      "controller": "CaixaController",
+      "handler": "vendaveis",
+      "verb": "GET",
+      "path": "/v1/admin/orders/vendaveis",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 290,
+      "controller": "CaixaController",
+      "handler": "abertas",
+      "verb": "GET",
+      "path": "/v1/admin/orders/abertas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 318,
+      "controller": "CaixaController",
+      "handler": "comanda",
+      "verb": "GET",
+      "path": "/v1/admin/orders/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 346,
+      "controller": "CaixaController",
+      "handler": "abrirComandaNova",
+      "verb": "POST",
+      "path": "/v1/admin/orders",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 390,
+      "controller": "CaixaController",
+      "handler": "cancelarComandaAberta",
+      "verb": "DELETE",
+      "path": "/v1/admin/orders/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 409,
+      "controller": "CaixaController",
+      "handler": "item",
+      "verb": "POST",
+      "path": "/v1/admin/orders/:id/items",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 455,
+      "controller": "CaixaController",
+      "handler": "removerDaComanda",
+      "verb": "DELETE",
+      "path": "/v1/admin/orders/:id/items/:itemId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 497,
+      "controller": "CaixaController",
+      "handler": "ajustar",
+      "verb": "PATCH",
+      "path": "/v1/admin/orders/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.discount'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 538,
+      "controller": "CaixaController",
+      "handler": "pagar",
+      "verb": "POST",
+      "path": "/v1/admin/orders/:id/close",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 608,
+      "controller": "CaixaController",
+      "handler": "devedores",
+      "verb": "GET",
+      "path": "/v1/admin/debts",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 614,
+      "controller": "CaixaController",
+      "handler": "receber",
+      "verb": "POST",
+      "path": "/v1/admin/debts/receive",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 661,
+      "controller": "CaixaController",
+      "handler": "cobrancas",
+      "verb": "GET",
+      "path": "/v1/admin/orders/:id/charges",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 682,
+      "controller": "CaixaController",
+      "handler": "cobrar",
+      "verb": "POST",
+      "path": "/v1/admin/orders/:id/charges",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 721,
+      "controller": "CaixaController",
+      "handler": "cancelarCobranca",
+      "verb": "DELETE",
+      "path": "/v1/admin/orders/:id/charges/:chargeId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'cashier.open'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/caixa.controller.ts",
+      "line": 747,
+      "controller": "CaixaController",
+      "handler": "faturamento",
+      "verb": "GET",
+      "path": "/v1/admin/revenue",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/campanha.controller.ts",
+      "line": 73,
+      "controller": "CampanhaController",
+      "handler": "listar",
+      "verb": "GET",
+      "path": "/v1/admin/campanhas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/campanha.controller.ts",
+      "line": 87,
+      "controller": "CampanhaController",
+      "handler": "criar",
+      "verb": "POST",
+      "path": "/v1/admin/campanhas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/campanha.controller.ts",
+      "line": 136,
+      "controller": "CampanhaController",
+      "handler": "enviar",
+      "verb": "POST",
+      "path": "/v1/admin/campanhas/:id/enviar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/campanha.controller.ts",
+      "line": 179,
+      "controller": "CampanhaController",
+      "handler": "retomar",
+      "verb": "POST",
+      "path": "/v1/admin/campanhas/:id/retomar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/campanha.controller.ts",
+      "line": 210,
+      "controller": "CampanhaController",
+      "handler": "pulados",
+      "verb": "GET",
+      "path": "/v1/admin/campanhas/:id/pulados",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 80,
+      "controller": "CatalogoController",
+      "handler": "services",
+      "verb": "GET",
+      "path": "/v1/admin/catalog/services",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 86,
+      "controller": "CatalogoController",
+      "handler": "createService",
+      "verb": "POST",
+      "path": "/v1/admin/catalog/services",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 99,
+      "controller": "CatalogoController",
+      "handler": "updateService",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/services/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 121,
+      "controller": "CatalogoController",
+      "handler": "serviceActive",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/services/:id/active",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 136,
+      "controller": "CatalogoController",
+      "handler": "serviceResources",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/services/:id/resources",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 160,
+      "controller": "CatalogoController",
+      "handler": "professionals",
+      "verb": "GET",
+      "path": "/v1/admin/catalog/professionals",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 167,
+      "controller": "CatalogoController",
+      "handler": "createProfessional",
+      "verb": "POST",
+      "path": "/v1/admin/catalog/professionals",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 181,
+      "controller": "CatalogoController",
+      "handler": "updateProfessional",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/professionals/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 205,
+      "controller": "CatalogoController",
+      "handler": "perfilPublico",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/professionals/:id/perfil-publico",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 226,
+      "controller": "CatalogoController",
+      "handler": "professionalActive",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/professionals/:id/active",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 250,
+      "controller": "CatalogoController",
+      "handler": "schedule",
+      "verb": "GET",
+      "path": "/v1/admin/catalog/professionals/:id/schedule",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 273,
+      "controller": "CatalogoController",
+      "handler": "saveSchedule",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/professionals/:id/schedule",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 300,
+      "controller": "CatalogoController",
+      "handler": "resources",
+      "verb": "GET",
+      "path": "/v1/admin/catalog/resources",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/catalogo.controller.ts",
+      "line": 307,
+      "controller": "CatalogoController",
+      "handler": "saveResources",
+      "verb": "PUT",
+      "path": "/v1/admin/catalog/resources",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/chaves.controller.ts",
+      "line": 55,
+      "controller": "ChavesController",
+      "handler": "listar",
+      "verb": "GET",
+      "path": "/v1/admin/chaves",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/chaves.controller.ts",
+      "line": 71,
+      "controller": "ChavesController",
+      "handler": "criar",
+      "verb": "POST",
+      "path": "/v1/admin/chaves",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/chaves.controller.ts",
+      "line": 91,
+      "controller": "ChavesController",
+      "handler": "revogar",
+      "verb": "POST",
+      "path": "/v1/admin/chaves/:chaveId/revogacao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/churn.controller.ts",
+      "line": 41,
+      "controller": "ChurnController",
+      "handler": "risco",
+      "verb": "GET",
+      "path": "/v1/admin/churn",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'",
+        "'customers.view_notes'",
+        "'reviews.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/churn.controller.ts",
+      "line": 85,
+      "controller": "ChurnController",
+      "handler": "crescimento",
+      "verb": "GET",
+      "path": "/v1/admin/crescimento",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'",
+        "'reports.finance'",
+        "'customers.view'",
+        "'customers.view_notes'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/clientes.controller.ts",
+      "line": 29,
+      "controller": "ClientesController",
+      "handler": "listar",
+      "verb": "GET",
+      "path": "/v1/admin/customers/directory",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 113,
+      "controller": "ComissaoController",
+      "handler": "minhaComissao",
+      "verb": "GET",
+      "path": "/v1/admin/commission/mine",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_own'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 131,
+      "controller": "ComissaoController",
+      "handler": "meusFechamentos",
+      "verb": "GET",
+      "path": "/v1/admin/commission/mine/closures",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_own'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 143,
+      "controller": "ComissaoController",
+      "handler": "extrato",
+      "verb": "GET",
+      "path": "/v1/admin/commission",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_all'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 153,
+      "controller": "ComissaoController",
+      "handler": "fechamentos",
+      "verb": "GET",
+      "path": "/v1/admin/commission/closures",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_all'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 172,
+      "controller": "ComissaoController",
+      "handler": "fechar",
+      "verb": "POST",
+      "path": "/v1/admin/commission/closures",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 197,
+      "controller": "ComissaoController",
+      "handler": "regras",
+      "verb": "GET",
+      "path": "/v1/admin/commission/rules",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 203,
+      "controller": "ComissaoController",
+      "handler": "salvarRegra",
+      "verb": "PUT",
+      "path": "/v1/admin/commission/rules",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 234,
+      "controller": "ComissaoController",
+      "handler": "removerRegra",
+      "verb": "DELETE",
+      "path": "/v1/admin/commission/rules/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 253,
+      "controller": "ComissaoController",
+      "handler": "configuracao",
+      "verb": "PUT",
+      "path": "/v1/admin/commission/settings",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 282,
+      "controller": "ComissaoController",
+      "handler": "aliquotas",
+      "verb": "GET",
+      "path": "/v1/admin/commission/fees",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/comissao.controller.ts",
+      "line": 288,
+      "controller": "ComissaoController",
+      "handler": "salvarAliquota",
+      "verb": "PUT",
+      "path": "/v1/admin/commission/fees",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.edit_rules'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/dre.controller.ts",
+      "line": 111,
+      "controller": "DreController",
+      "handler": "dre",
+      "verb": "GET",
+      "path": "/v1/admin/dre",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view_profit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/dre.controller.ts",
+      "line": 138,
+      "controller": "DreController",
+      "handler": "vales",
+      "verb": "GET",
+      "path": "/v1/admin/vales",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_all'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/dre.controller.ts",
+      "line": 160,
+      "controller": "DreController",
+      "handler": "teto",
+      "verb": "GET",
+      "path": "/v1/admin/vales/teto/:professionalId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.advance'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/dre.controller.ts",
+      "line": 177,
+      "controller": "DreController",
+      "handler": "adiantar",
+      "verb": "POST",
+      "path": "/v1/admin/vales",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.advance'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/dre.controller.ts",
+      "line": 214,
+      "controller": "DreController",
+      "handler": "cancelarOVale",
+      "verb": "POST",
+      "path": "/v1/admin/vales/:id/cancelar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.advance'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/dre.controller.ts",
+      "line": 237,
+      "controller": "DreController",
+      "handler": "estornar",
+      "verb": "POST",
+      "path": "/v1/admin/comandas/:id/estornar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.order_refund'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/dre.controller.ts",
+      "line": 261,
+      "controller": "DreController",
+      "handler": "transferir",
+      "verb": "POST",
+      "path": "/v1/admin/pacotes/:id/transferir",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.package_transfer'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 80,
+      "controller": "EstoqueController",
+      "handler": "lista",
+      "verb": "GET",
+      "path": "/v1/admin/estoque/produtos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 108,
+      "controller": "EstoqueController",
+      "handler": "criar",
+      "verb": "PUT",
+      "path": "/v1/admin/estoque/produtos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.adjust'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 139,
+      "controller": "EstoqueController",
+      "handler": "editar",
+      "verb": "PUT",
+      "path": "/v1/admin/estoque/produtos/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.adjust'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 172,
+      "controller": "EstoqueController",
+      "handler": "historico",
+      "verb": "GET",
+      "path": "/v1/admin/estoque/produtos/:id/movimentos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 184,
+      "controller": "EstoqueController",
+      "handler": "mover",
+      "verb": "POST",
+      "path": "/v1/admin/estoque/movimentos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.adjust'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 218,
+      "controller": "EstoqueController",
+      "handler": "ficha",
+      "verb": "GET",
+      "path": "/v1/admin/estoque/ficha/:serviceId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 234,
+      "controller": "EstoqueController",
+      "handler": "salvarAFicha",
+      "verb": "PUT",
+      "path": "/v1/admin/estoque/ficha/:serviceId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'",
+        "'inventory.adjust'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/estoque.controller.ts",
+      "line": 260,
+      "controller": "EstoqueController",
+      "handler": "margem",
+      "verb": "GET",
+      "path": "/v1/admin/estoque/margem",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view_profit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/ficha.controller.ts",
+      "line": 78,
+      "controller": "FichaController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/customers/:id/ficha",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view_notes'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/ficha.controller.ts",
+      "line": 91,
+      "controller": "FichaController",
+      "handler": "salvar",
+      "verb": "PUT",
+      "path": "/v1/admin/customers/:id/preferences",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit_notes'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/ficha.controller.ts",
+      "line": 123,
+      "controller": "FichaController",
+      "handler": "fotos",
+      "verb": "GET",
+      "path": "/v1/admin/customers/:id/fotos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view_photos'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/ficha.controller.ts",
+      "line": 148,
+      "controller": "FichaController",
+      "handler": "registrar",
+      "verb": "POST",
+      "path": "/v1/admin/customers/:id/fotos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.manage_photos'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/ficha.controller.ts",
+      "line": 172,
+      "controller": "FichaController",
+      "handler": "publicar",
+      "verb": "PUT",
+      "path": "/v1/admin/customers/fotos/:fotoId/portfolio",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.manage_photos'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/ficha.controller.ts",
+      "line": 200,
+      "controller": "FichaController",
+      "handler": "apagar",
+      "verb": "DELETE",
+      "path": "/v1/admin/customers/fotos/:fotoId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.manage_photos'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fidelidade.controller.ts",
+      "line": 65,
+      "controller": "FidelidadeController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/fidelidade/programa",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fidelidade.controller.ts",
+      "line": 71,
+      "controller": "FidelidadeController",
+      "handler": "salvar",
+      "verb": "PUT",
+      "path": "/v1/admin/fidelidade/programa",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fidelidade.controller.ts",
+      "line": 96,
+      "controller": "FidelidadeController",
+      "handler": "saldo",
+      "verb": "GET",
+      "path": "/v1/admin/fidelidade/clientes/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'",
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fidelidade.controller.ts",
+      "line": 108,
+      "controller": "FidelidadeController",
+      "handler": "ajustar",
+      "verb": "POST",
+      "path": "/v1/admin/fidelidade/clientes/:id/ajuste",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.loyalty_adjust'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fila.controller.ts",
+      "line": 70,
+      "controller": "FilaController",
+      "handler": "list",
+      "verb": "GET",
+      "path": "/v1/admin/queue",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [
+        "'fila'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fila.controller.ts",
+      "line": 91,
+      "controller": "FilaController",
+      "handler": "fit",
+      "verb": "GET",
+      "path": "/v1/admin/queue/fit",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.create'"
+      ],
+      "feature": [
+        "'fila'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fila.controller.ts",
+      "line": 116,
+      "controller": "FilaController",
+      "handler": "join",
+      "verb": "POST",
+      "path": "/v1/admin/queue",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.create'"
+      ],
+      "feature": [
+        "'fila'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fila.controller.ts",
+      "line": 153,
+      "controller": "FilaController",
+      "handler": "move",
+      "verb": "POST",
+      "path": "/v1/admin/queue/:id/move",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.attend'"
+      ],
+      "feature": [
+        "'fila'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fila.controller.ts",
+      "line": 182,
+      "controller": "FilaController",
+      "handler": "seat",
+      "verb": "POST",
+      "path": "/v1/admin/queue/:id/seat",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.attend'"
+      ],
+      "feature": [
+        "'fila'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 109,
+      "controller": "FinanceiroController",
+      "handler": "agenda",
+      "verb": "GET",
+      "path": "/v1/admin/financeiro/contas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 128,
+      "controller": "FinanceiroController",
+      "handler": "criar",
+      "verb": "POST",
+      "path": "/v1/admin/financeiro/contas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.bills_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 156,
+      "controller": "FinanceiroController",
+      "handler": "quitar",
+      "verb": "POST",
+      "path": "/v1/admin/financeiro/contas/:id/quitar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.bills_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 183,
+      "controller": "FinanceiroController",
+      "handler": "cancelar",
+      "verb": "POST",
+      "path": "/v1/admin/financeiro/contas/:id/cancelar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.bills_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 206,
+      "controller": "FinanceiroController",
+      "handler": "categorias",
+      "verb": "GET",
+      "path": "/v1/admin/financeiro/categorias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 212,
+      "controller": "FinanceiroController",
+      "handler": "criarCategoria",
+      "verb": "POST",
+      "path": "/v1/admin/financeiro/categorias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.bills_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 228,
+      "controller": "FinanceiroController",
+      "handler": "arquivarCategoria",
+      "verb": "PUT",
+      "path": "/v1/admin/financeiro/categorias/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.bills_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 247,
+      "controller": "FinanceiroController",
+      "handler": "contas",
+      "verb": "GET",
+      "path": "/v1/admin/financeiro/contas-bancarias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 253,
+      "controller": "FinanceiroController",
+      "handler": "criarConta",
+      "verb": "POST",
+      "path": "/v1/admin/financeiro/contas-bancarias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.bills_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 277,
+      "controller": "FinanceiroController",
+      "handler": "transferencias",
+      "verb": "GET",
+      "path": "/v1/admin/financeiro/transferencias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 289,
+      "controller": "FinanceiroController",
+      "handler": "transferir",
+      "verb": "POST",
+      "path": "/v1/admin/financeiro/transferencias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.bills_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 328,
+      "controller": "FinanceiroController",
+      "handler": "resumoDoCliente",
+      "verb": "GET",
+      "path": "/v1/admin/financeiro/clientes/:id/resumo",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'",
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 347,
+      "controller": "FinanceiroController",
+      "handler": "fiado",
+      "verb": "GET",
+      "path": "/v1/admin/financeiro/clientes/:id/fiado",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'",
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 366,
+      "controller": "FinanceiroController",
+      "handler": "limite",
+      "verb": "PUT",
+      "path": "/v1/admin/financeiro/clientes/:id/limite",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.credit_limit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/financeiro.controller.ts",
+      "line": 386,
+      "controller": "FinanceiroController",
+      "handler": "saldoInicial",
+      "verb": "POST",
+      "path": "/v1/admin/financeiro/clientes/:id/saldo-inicial",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.credit_limit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal.controller.ts",
+      "line": 123,
+      "controller": "FiscalController",
+      "handler": "configuracao",
+      "verb": "GET",
+      "path": "/v1/admin/fiscal/configuracao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.settings'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal.controller.ts",
+      "line": 142,
+      "controller": "FiscalController",
+      "handler": "salvar",
+      "verb": "PUT",
+      "path": "/v1/admin/fiscal/configuracao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.settings'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal.controller.ts",
+      "line": 204,
+      "controller": "FiscalController",
+      "handler": "notas",
+      "verb": "GET",
+      "path": "/v1/admin/fiscal/notas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.view'",
+        "'finance.view'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal.controller.ts",
+      "line": 253,
+      "controller": "FiscalController",
+      "handler": "daComanda",
+      "verb": "GET",
+      "path": "/v1/admin/fiscal/notas/comanda/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.view'",
+        "'customers.view'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal.controller.ts",
+      "line": 278,
+      "controller": "FiscalController",
+      "handler": "documento",
+      "verb": "PUT",
+      "path": "/v1/admin/fiscal/tomador/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal.controller.ts",
+      "line": 306,
+      "controller": "FiscalController",
+      "handler": "emitir",
+      "verb": "POST",
+      "path": "/v1/admin/fiscal/notas/comanda/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.issue'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/fiscal.controller.ts",
+      "line": 330,
+      "controller": "FiscalController",
+      "handler": "cancelar",
+      "verb": "POST",
+      "path": "/v1/admin/fiscal/notas/:id/cancelar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'fiscal.issue'"
+      ],
+      "feature": [
+        "'fiscal'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/franquia.controller.ts",
+      "line": 71,
+      "controller": "FranquiaController",
+      "handler": "padrao",
+      "verb": "GET",
+      "path": "/v1/admin/franquia/padrao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/franquia.controller.ts",
+      "line": 79,
+      "controller": "FranquiaController",
+      "handler": "publicar",
+      "verb": "POST",
+      "path": "/v1/admin/franquia/padrao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'franchise.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/franquia.controller.ts",
+      "line": 109,
+      "controller": "FranquiaController",
+      "handler": "despublicar",
+      "verb": "DELETE",
+      "path": "/v1/admin/franquia/padrao/:itemId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'franchise.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/franquia.controller.ts",
+      "line": 133,
+      "controller": "FranquiaController",
+      "handler": "adotar",
+      "verb": "POST",
+      "path": "/v1/admin/franquia/adocao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 84,
+      "controller": "ImportacaoController",
+      "handler": "listar",
+      "verb": "GET",
+      "path": "/v1/admin/imports",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [
+        "'importacao'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 92,
+      "controller": "ImportacaoController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/imports/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [
+        "'importacao'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 113,
+      "controller": "ImportacaoController",
+      "handler": "analisar",
+      "verb": "POST",
+      "path": "/v1/admin/imports",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [
+        "'importacao'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 138,
+      "controller": "ImportacaoController",
+      "handler": "resolverConflito",
+      "verb": "POST",
+      "path": "/v1/admin/imports/:id/conflicts",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [
+        "'importacao'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 164,
+      "controller": "ImportacaoController",
+      "handler": "aplicar",
+      "verb": "POST",
+      "path": "/v1/admin/imports/:id/apply",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [
+        "'importacao'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 186,
+      "controller": "ImportacaoController",
+      "handler": "reverter",
+      "verb": "POST",
+      "path": "/v1/admin/imports/:id/revert",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [
+        "'importacao'"
+      ],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 208,
+      "controller": "ImportacaoController",
+      "handler": "slugs",
+      "verb": "GET",
+      "path": "/v1/admin/slugs",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/importacao.controller.ts",
+      "line": 214,
+      "controller": "ImportacaoController",
+      "handler": "adicionarSlug",
+      "verb": "POST",
+      "path": "/v1/admin/slugs",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/insight.controller.ts",
+      "line": 69,
+      "controller": "InsightController",
+      "handler": "insights",
+      "verb": "GET",
+      "path": "/v1/admin/insights",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view_all_professionals'",
+        "'customers.view'",
+        "'customers.view_notes'",
+        "'finance.view'",
+        "'inventory.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 77,
+      "controller": "LgpdController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/customers/:id/consentimentos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 111,
+      "controller": "LgpdController",
+      "handler": "registrar",
+      "verb": "PUT",
+      "path": "/v1/admin/customers/:id/consentimentos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 197,
+      "controller": "LgpdController",
+      "handler": "exportar",
+      "verb": "GET",
+      "path": "/v1/admin/customers/:id/dados",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.export'",
+        "'finance.view'",
+        "'customers.view_notes'",
+        "'feedback.view'",
+        "'customers.view_photos'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 241,
+      "controller": "LgpdController",
+      "handler": "retencao",
+      "verb": "GET",
+      "path": "/v1/admin/customers/lgpd/retencao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 258,
+      "controller": "LgpdController",
+      "handler": "pedidos",
+      "verb": "GET",
+      "path": "/v1/admin/customers/lgpd/pedidos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 276,
+      "controller": "LgpdController",
+      "handler": "abrir",
+      "verb": "POST",
+      "path": "/v1/admin/customers/:id/lgpd/pedidos",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.edit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 295,
+      "controller": "LgpdController",
+      "handler": "encerrar",
+      "verb": "PUT",
+      "path": "/v1/admin/customers/lgpd/pedidos/:pedidoId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/lgpd.controller.ts",
+      "line": 337,
+      "controller": "LgpdController",
+      "handler": "anonimizar",
+      "verb": "POST",
+      "path": "/v1/admin/customers/:id/anonimizar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.anonymize'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/metrica.controller.ts",
+      "line": 82,
+      "controller": "MetricaController",
+      "handler": "catalogo",
+      "verb": "GET",
+      "path": "/v1/admin/metricas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/metrica.controller.ts",
+      "line": 122,
+      "controller": "MetricaController",
+      "handler": "conversar",
+      "verb": "POST",
+      "path": "/v1/admin/metricas/conversar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/metrica.controller.ts",
+      "line": 153,
+      "controller": "MetricaController",
+      "handler": "perguntar",
+      "verb": "POST",
+      "path": "/v1/admin/metricas/perguntar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/mfa.controller.ts",
+      "line": 57,
+      "controller": "MfaController",
+      "handler": "estado",
+      "verb": "GET",
+      "path": "/v1/admin/mfa",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/mfa.controller.ts",
+      "line": 94,
+      "controller": "MfaController",
+      "handler": "comecar",
+      "verb": "POST",
+      "path": "/v1/admin/mfa/setup",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/mfa.controller.ts",
+      "line": 108,
+      "controller": "MfaController",
+      "handler": "confirmar",
+      "verb": "POST",
+      "path": "/v1/admin/mfa/confirm",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/mfa.controller.ts",
+      "line": 128,
+      "controller": "MfaController",
+      "handler": "verificar",
+      "verb": "POST",
+      "path": "/v1/admin/mfa/verify",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/mfa.controller.ts",
+      "line": 172,
+      "controller": "MfaController",
+      "handler": "politica",
+      "verb": "PUT",
+      "path": "/v1/admin/mfa/policy",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/mfa.controller.ts",
+      "line": 217,
+      "controller": "MfaController",
+      "handler": "desligar",
+      "verb": "POST",
+      "path": "/v1/admin/mfa/disable",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 101,
+      "controller": "MultiunidadeController",
+      "handler": "selecao",
+      "verb": "GET",
+      "path": "/v1/admin/unidades",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 107,
+      "controller": "MultiunidadeController",
+      "handler": "escolher",
+      "verb": "POST",
+      "path": "/v1/admin/unidades/escolher",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 134,
+      "controller": "MultiunidadeController",
+      "handler": "cadastro",
+      "verb": "GET",
+      "path": "/v1/admin/unidades/cadastro",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 140,
+      "controller": "MultiunidadeController",
+      "handler": "abrirUnidade",
+      "verb": "POST",
+      "path": "/v1/admin/unidades/cadastro",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 162,
+      "controller": "MultiunidadeController",
+      "handler": "abrirOuFechar",
+      "verb": "POST",
+      "path": "/v1/admin/unidades/cadastro/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 188,
+      "controller": "MultiunidadeController",
+      "handler": "equipe",
+      "verb": "GET",
+      "path": "/v1/admin/unidades/equipe",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'",
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 208,
+      "controller": "MultiunidadeController",
+      "handler": "definirUnidades",
+      "verb": "POST",
+      "path": "/v1/admin/unidades/equipe/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'",
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 230,
+      "controller": "MultiunidadeController",
+      "handler": "transferencias",
+      "verb": "GET",
+      "path": "/v1/admin/estoque/transferencias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.adjust'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/multiunidade.controller.ts",
+      "line": 257,
+      "controller": "MultiunidadeController",
+      "handler": "transferir",
+      "verb": "POST",
+      "path": "/v1/admin/estoque/transferencias",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'inventory.adjust'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pacote.controller.ts",
+      "line": 61,
+      "controller": "PacoteController",
+      "handler": "catalogo",
+      "verb": "GET",
+      "path": "/v1/admin/pacotes/catalogo",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'appointments.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pacote.controller.ts",
+      "line": 67,
+      "controller": "PacoteController",
+      "handler": "criar",
+      "verb": "PUT",
+      "path": "/v1/admin/pacotes/catalogo",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pacote.controller.ts",
+      "line": 92,
+      "controller": "PacoteController",
+      "handler": "editar",
+      "verb": "PUT",
+      "path": "/v1/admin/pacotes/catalogo/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pacote.controller.ts",
+      "line": 119,
+      "controller": "PacoteController",
+      "handler": "doCliente",
+      "verb": "GET",
+      "path": "/v1/admin/pacotes/clientes/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'",
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pacote.controller.ts",
+      "line": 135,
+      "controller": "PacoteController",
+      "handler": "reembolsar",
+      "verb": "POST",
+      "path": "/v1/admin/pacotes/clientes/pacotes/:id/reembolsar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.package_refund'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pacote.controller.ts",
+      "line": 167,
+      "controller": "PacoteController",
+      "handler": "receita",
+      "verb": "GET",
+      "path": "/v1/admin/pacotes/receita",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/painel.controller.ts",
+      "line": 92,
+      "controller": "PainelController",
+      "handler": "operacional",
+      "verb": "GET",
+      "path": "/v1/admin/dashboard",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'reports.operational'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/painel.controller.ts",
+      "line": 107,
+      "controller": "PainelController",
+      "handler": "dinheiro",
+      "verb": "GET",
+      "path": "/v1/admin/dashboard/revenue",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/painel.controller.ts",
+      "line": 121,
+      "controller": "PainelController",
+      "handler": "diagnostico",
+      "verb": "GET",
+      "path": "/v1/admin/catalog/diagnosis",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/painel.controller.ts",
+      "line": 129,
+      "controller": "PainelController",
+      "handler": "trilha",
+      "verb": "GET",
+      "path": "/v1/admin/audit",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/painel.controller.ts",
+      "line": 144,
+      "controller": "PainelController",
+      "handler": "trilhaDoDinheiro",
+      "verb": "GET",
+      "path": "/v1/admin/audit/finance",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/plano.controller.ts",
+      "line": 67,
+      "controller": "PlanoController",
+      "handler": "plano",
+      "verb": "GET",
+      "path": "/v1/admin/plano",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/plano.controller.ts",
+      "line": 130,
+      "controller": "PlanoController",
+      "handler": "opcoes",
+      "verb": "GET",
+      "path": "/v1/admin/plano/opcoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/plano.controller.ts",
+      "line": 166,
+      "controller": "PlanoController",
+      "handler": "marketplace",
+      "verb": "GET",
+      "path": "/v1/admin/plano/marketplace",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/plano.controller.ts",
+      "line": 199,
+      "controller": "PlanoController",
+      "handler": "contestar",
+      "verb": "POST",
+      "path": "/v1/admin/plano/marketplace/:id/contestar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/plano.controller.ts",
+      "line": 223,
+      "controller": "PlanoController",
+      "handler": "faturas",
+      "verb": "GET",
+      "path": "/v1/admin/plano/faturas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/plano.controller.ts",
+      "line": 250,
+      "controller": "PlanoController",
+      "handler": "trocar",
+      "verb": "POST",
+      "path": "/v1/admin/plano",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/precificacao.controller.ts",
+      "line": 44,
+      "controller": "PrecificacaoController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/precificacao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/precificacao.controller.ts",
+      "line": 59,
+      "controller": "PrecificacaoController",
+      "handler": "ligar",
+      "verb": "PUT",
+      "path": "/v1/admin/precificacao/ligado",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/precificacao.controller.ts",
+      "line": 70,
+      "controller": "PrecificacaoController",
+      "handler": "criar",
+      "verb": "POST",
+      "path": "/v1/admin/precificacao/faixas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/precificacao.controller.ts",
+      "line": 101,
+      "controller": "PrecificacaoController",
+      "handler": "apagar",
+      "verb": "DELETE",
+      "path": "/v1/admin/precificacao/faixas/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/precificacao.controller.ts",
+      "line": 130,
+      "controller": "PrecificacaoController",
+      "handler": "recomendacoes",
+      "verb": "GET",
+      "path": "/v1/admin/precificacao/recomendacoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'",
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pro.controller.ts",
+      "line": 59,
+      "controller": "ProController",
+      "handler": "meusNumeros",
+      "verb": "GET",
+      "path": "/v1/admin/pro/me",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_own'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pro.controller.ts",
+      "line": 109,
+      "controller": "ProController",
+      "handler": "metas",
+      "verb": "GET",
+      "path": "/v1/admin/pro/goals",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/pro.controller.ts",
+      "line": 120,
+      "controller": "ProController",
+      "handler": "salvarMeta",
+      "verb": "PUT",
+      "path": "/v1/admin/pro/goals",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/recado.controller.ts",
+      "line": 57,
+      "controller": "RecadoController",
+      "handler": "fila",
+      "verb": "GET",
+      "path": "/v1/admin/recados",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'feedback.view'",
+        "'customers.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/recado.controller.ts",
+      "line": 84,
+      "controller": "RecadoController",
+      "handler": "assumir",
+      "verb": "POST",
+      "path": "/v1/admin/recados/:id/assumir",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'feedback.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/recado.controller.ts",
+      "line": 106,
+      "controller": "RecadoController",
+      "handler": "devolver",
+      "verb": "POST",
+      "path": "/v1/admin/recados/:id/devolver",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'feedback.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/recado.controller.ts",
+      "line": 127,
+      "controller": "RecadoController",
+      "handler": "responder",
+      "verb": "POST",
+      "path": "/v1/admin/recados/:id/responder",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'feedback.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/recado.controller.ts",
+      "line": 148,
+      "controller": "RecadoController",
+      "handler": "encerrar",
+      "verb": "POST",
+      "path": "/v1/admin/recados/:id/encerrar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'feedback.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/recepcao.controller.ts",
+      "line": 32,
+      "controller": "RecepcaoController",
+      "handler": "lacunas",
+      "verb": "GET",
+      "path": "/v1/admin/recepcao/lacunas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'feedback.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/recepcao.controller.ts",
+      "line": 50,
+      "controller": "RecepcaoController",
+      "handler": "resolver",
+      "verb": "POST",
+      "path": "/v1/admin/recepcao/lacunas/:id/resolver",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'feedback.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/rede.controller.ts",
+      "line": 57,
+      "controller": "RedeController",
+      "handler": "consolidado",
+      "verb": "GET",
+      "path": "/v1/admin/rede/consolidado",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/rede.controller.ts",
+      "line": 70,
+      "controller": "RedeController",
+      "handler": "lugar",
+      "verb": "GET",
+      "path": "/v1/admin/rede/meu-lugar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/rede.controller.ts",
+      "line": 83,
+      "controller": "RedeController",
+      "handler": "metas",
+      "verb": "GET",
+      "path": "/v1/admin/rede/metas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/rede.controller.ts",
+      "line": 97,
+      "controller": "RedeController",
+      "handler": "salvarMeta",
+      "verb": "PUT",
+      "path": "/v1/admin/rede/metas",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.view'",
+        "'franchise.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/segmento.controller.ts",
+      "line": 24,
+      "controller": "SegmentoController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/segments",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.view'",
+        "'customers.view_notes'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sessoes.controller.ts",
+      "line": 38,
+      "controller": "SessoesController",
+      "handler": "listar",
+      "verb": "GET",
+      "path": "/v1/admin/sessoes",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sessoes.controller.ts",
+      "line": 72,
+      "controller": "SessoesController",
+      "handler": "encerrar",
+      "verb": "DELETE",
+      "path": "/v1/admin/sessoes/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sessoes.controller.ts",
+      "line": 99,
+      "controller": "SessoesController",
+      "handler": "expulsarSuporte",
+      "verb": "DELETE",
+      "path": "/v1/admin/sessoes/suporte/tudo",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'settings.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sinal.controller.ts",
+      "line": 69,
+      "controller": "SinalController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/admin/appointments/:id/deposit",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.deposit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sinal.controller.ts",
+      "line": 83,
+      "controller": "SinalController",
+      "handler": "registrar",
+      "verb": "POST",
+      "path": "/v1/admin/appointments/:id/deposit",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.deposit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sinal.controller.ts",
+      "line": 107,
+      "controller": "SinalController",
+      "handler": "devolver",
+      "verb": "DELETE",
+      "path": "/v1/admin/appointments/:id/deposit",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.deposit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sinal.controller.ts",
+      "line": 131,
+      "controller": "SinalController",
+      "handler": "score",
+      "verb": "GET",
+      "path": "/v1/admin/customers/:id/reliability",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.deposit'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/sinal.controller.ts",
+      "line": 141,
+      "controller": "SinalController",
+      "handler": "ajustar",
+      "verb": "PUT",
+      "path": "/v1/admin/customers/:id/reliability",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'customers.reliability_override'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/split.controller.ts",
+      "line": 87,
+      "controller": "SplitController",
+      "handler": "lista",
+      "verb": "GET",
+      "path": "/v1/admin/split",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_all'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/split.controller.ts",
+      "line": 111,
+      "controller": "SplitController",
+      "handler": "meus",
+      "verb": "GET",
+      "path": "/v1/admin/split/meus",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_own'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/split.controller.ts",
+      "line": 130,
+      "controller": "SplitController",
+      "handler": "daVenda",
+      "verb": "GET",
+      "path": "/v1/admin/split/venda/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_all'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/split.controller.ts",
+      "line": 150,
+      "controller": "SplitController",
+      "handler": "listaDeRecebedores",
+      "verb": "GET",
+      "path": "/v1/admin/split/recebedores",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'commission.view_all'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/split.controller.ts",
+      "line": 164,
+      "controller": "SplitController",
+      "handler": "cadastrar",
+      "verb": "PUT",
+      "path": "/v1/admin/split/recebedores/:id",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.split_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/split.controller.ts",
+      "line": 197,
+      "controller": "SplitController",
+      "handler": "configurar",
+      "verb": "PUT",
+      "path": "/v1/admin/split/configuracao",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'finance.split_manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 89,
+      "controller": "TeamController",
+      "handler": "list",
+      "verb": "GET",
+      "path": "/v1/admin/team",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 112,
+      "controller": "TeamController",
+      "handler": "permissoes",
+      "verb": "PUT",
+      "path": "/v1/admin/team/permissoes/:papel",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 142,
+      "controller": "TeamController",
+      "handler": "create",
+      "verb": "POST",
+      "path": "/v1/admin/team",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 168,
+      "controller": "TeamController",
+      "handler": "role",
+      "verb": "PUT",
+      "path": "/v1/admin/team/:id/role",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 191,
+      "controller": "TeamController",
+      "handler": "active",
+      "verb": "PUT",
+      "path": "/v1/admin/team/:id/active",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 213,
+      "controller": "TeamController",
+      "handler": "reset",
+      "verb": "POST",
+      "path": "/v1/admin/team/:id/reset-password",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 242,
+      "controller": "TeamController",
+      "handler": "invite",
+      "verb": "POST",
+      "path": "/v1/admin/team/invite",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 280,
+      "controller": "MeController",
+      "handler": "me",
+      "verb": "GET",
+      "path": "/v1/admin/me",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/team.controller.ts",
+      "line": 291,
+      "controller": "MeController",
+      "handler": "password",
+      "verb": "PUT",
+      "path": "/v1/admin/me/password",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/webhooks.controller.ts",
+      "line": 54,
+      "controller": "WebhooksController",
+      "handler": "listar",
+      "verb": "GET",
+      "path": "/v1/admin/webhooks",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/webhooks.controller.ts",
+      "line": 64,
+      "controller": "WebhooksController",
+      "handler": "cadastrar",
+      "verb": "POST",
+      "path": "/v1/admin/webhooks",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/webhooks.controller.ts",
+      "line": 88,
+      "controller": "WebhooksController",
+      "handler": "desligar",
+      "verb": "DELETE",
+      "path": "/v1/admin/webhooks/:endpointId",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'team.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 149,
+      "controller": "WhatsAppController",
+      "handler": "cadastro",
+      "verb": "GET",
+      "path": "/v1/admin/whatsapp/cadastro",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'whatsapp.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 156,
+      "controller": "WhatsAppController",
+      "handler": "salvar",
+      "verb": "PUT",
+      "path": "/v1/admin/whatsapp/cadastro",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'whatsapp.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 194,
+      "controller": "WhatsAppController",
+      "handler": "signup",
+      "verb": "GET",
+      "path": "/v1/admin/whatsapp/signup",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'whatsapp.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 225,
+      "controller": "WhatsAppController",
+      "handler": "conectar",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/conectar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'whatsapp.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 273,
+      "controller": "WhatsAppController",
+      "handler": "mensagem",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/mensagem",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'marketing.send'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 355,
+      "controller": "WhatsAppController",
+      "handler": "conciliar",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/conciliar",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'whatsapp.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 366,
+      "controller": "WhatsAppController",
+      "handler": "templates",
+      "verb": "GET",
+      "path": "/v1/admin/whatsapp/templates",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'whatsapp.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/admin/whatsapp.controller.ts",
+      "line": 373,
+      "controller": "WhatsAppController",
+      "handler": "submeter",
+      "verb": "POST",
+      "path": "/v1/admin/whatsapp/templates",
+      "guards": [
+        "StaffGuard",
+        "PermissaoGuard"
+      ],
+      "permission": [
+        "'whatsapp.manage'"
+      ],
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/auth/auth.controller.ts",
+      "line": 61,
+      "controller": "AuthController",
+      "handler": "requestCode",
+      "verb": "POST",
+      "path": "/v1/b/:slug/auth/otp",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/auth/auth.controller.ts",
+      "line": 82,
+      "controller": "AuthController",
+      "handler": "verify",
+      "verb": "POST",
+      "path": "/v1/b/:slug/auth/verify",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/auth/auth.controller.ts",
+      "line": 120,
+      "controller": "SessionController",
+      "handler": "logout",
+      "verb": "POST",
+      "path": "/v1/b/:slug/auth/logout",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/auth/auth.controller.ts",
+      "line": 158,
+      "controller": "SessionController",
+      "handler": "ler",
+      "verb": "GET",
+      "path": "/v1/b/:slug/auth/consentimento",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/auth/auth.controller.ts",
+      "line": 172,
+      "controller": "SessionController",
+      "handler": "decidir",
+      "verb": "PUT",
+      "path": "/v1/b/:slug/auth/consentimento",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/auth/auth.controller.ts",
+      "line": 223,
+      "controller": "SessionController",
+      "handler": "pedirDados",
+      "verb": "POST",
+      "path": "/v1/b/:slug/auth/pedido-de-dados",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/agente.controller.ts",
+      "line": 58,
+      "controller": "AgenteController",
+      "handler": "conversar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/agente",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/agente.controller.ts",
+      "line": 254,
+      "controller": "AgenteDoClienteController",
+      "handler": "conversar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/agente/meu",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/appointments.controller.ts",
+      "line": 88,
+      "controller": "GuestAppointmentsController",
+      "handler": "create",
+      "verb": "POST",
+      "path": "/v1/b/:slug/appointments",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/appointments.controller.ts",
+      "line": 164,
+      "controller": "GuestAppointmentsController",
+      "handler": "receipt",
+      "verb": "GET",
+      "path": "/v1/b/:slug/appointments/:id",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/appointments.controller.ts",
+      "line": 236,
+      "controller": "AppointmentsController",
+      "handler": "list",
+      "verb": "GET",
+      "path": "/v1/b/:slug/appointments",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/appointments.controller.ts",
+      "line": 245,
+      "controller": "AppointmentsController",
+      "handler": "cancel",
+      "verb": "POST",
+      "path": "/v1/b/:slug/appointments/:id/cancel",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/appointments.controller.ts",
+      "line": 277,
+      "controller": "AppointmentsController",
+      "handler": "rescheduleOptions",
+      "verb": "GET",
+      "path": "/v1/b/:slug/appointments/:id/availability",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/appointments.controller.ts",
+      "line": 333,
+      "controller": "AppointmentsController",
+      "handler": "reschedule",
+      "verb": "POST",
+      "path": "/v1/b/:slug/appointments/:id/reschedule",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/assinatura.controller.ts",
+      "line": 48,
+      "controller": "AssinaturaDoClienteController",
+      "handler": "meuPlano",
+      "verb": "GET",
+      "path": "/v1/b/:slug/plano",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/assinatura.controller.ts",
+      "line": 57,
+      "controller": "AssinaturaDoClienteController",
+      "handler": "cancelar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/plano/cancelar",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/assinatura.controller.ts",
+      "line": 89,
+      "controller": "AssinaturaDoClienteController",
+      "handler": "manter",
+      "verb": "POST",
+      "path": "/v1/b/:slug/plano/manter",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/avaliacao.controller.ts",
+      "line": 30,
+      "controller": "AvaliacaoDoClienteController",
+      "handler": "pendentes",
+      "verb": "GET",
+      "path": "/v1/b/:slug/reviews/pendentes",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/avaliacao.controller.ts",
+      "line": 38,
+      "controller": "AvaliacaoDoClienteController",
+      "handler": "avaliar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/reviews",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/booking.controller.ts",
+      "line": 29,
+      "controller": "BookingController",
+      "handler": "profile",
+      "verb": "GET",
+      "path": "/v1/b/:slug",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/booking.controller.ts",
+      "line": 50,
+      "controller": "BookingController",
+      "handler": "avaliacoes",
+      "verb": "GET",
+      "path": "/v1/b/:slug/avaliacoes",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/booking.controller.ts",
+      "line": 70,
+      "controller": "BookingController",
+      "handler": "barbeiro",
+      "verb": "GET",
+      "path": "/v1/b/:slug/b/:barbeiro",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/booking.controller.ts",
+      "line": 95,
+      "controller": "BookingController",
+      "handler": "availability",
+      "verb": "GET",
+      "path": "/v1/b/:slug/availability",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/espera.controller.ts",
+      "line": 113,
+      "controller": "EsperaPublicaController",
+      "handler": "entrar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/waitlist",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/espera.controller.ts",
+      "line": 248,
+      "controller": "EsperaDoClienteController",
+      "handler": "minhas",
+      "verb": "GET",
+      "path": "/v1/b/:slug/waitlist",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/espera.controller.ts",
+      "line": 269,
+      "controller": "EsperaDoClienteController",
+      "handler": "aceitarConvite",
+      "verb": "POST",
+      "path": "/v1/b/:slug/waitlist/:id/accept",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/espera.controller.ts",
+      "line": 287,
+      "controller": "EsperaDoClienteController",
+      "handler": "sair",
+      "verb": "DELETE",
+      "path": "/v1/b/:slug/waitlist/:id",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/fidelidade.controller.ts",
+      "line": 26,
+      "controller": "FidelidadeDoClienteController",
+      "handler": "meuSaldo",
+      "verb": "GET",
+      "path": "/v1/b/:slug/loyalty",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/fila-publica.controller.ts",
+      "line": 25,
+      "controller": "FilaPublicaController",
+      "handler": "posicao",
+      "verb": "GET",
+      "path": "/v1/b/:slug/queue/:token",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/oferta.controller.ts",
+      "line": 105,
+      "controller": "OfertaPublicaController",
+      "handler": "ver",
+      "verb": "GET",
+      "path": "/v1/b/:slug/offer/:token",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/oferta.controller.ts",
+      "line": 115,
+      "controller": "OfertaPublicaController",
+      "handler": "aceitar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/offer/:token/accept",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/pacote.controller.ts",
+      "line": 25,
+      "controller": "PacoteDoClienteController",
+      "handler": "meusPacotes",
+      "verb": "GET",
+      "path": "/v1/b/:slug/packages",
+      "guards": [
+        "CustomerGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/recado.controller.ts",
+      "line": 47,
+      "controller": "RecadoPublicoController",
+      "handler": "mandar",
+      "verb": "POST",
+      "path": "/v1/b/:slug/feedback",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/vitrine.controller.ts",
+      "line": 52,
+      "controller": "VitrineController",
+      "handler": "cidades",
+      "verb": "GET",
+      "path": "/v1/marketplace/cidades",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/booking/vitrine.controller.ts",
+      "line": 57,
+      "controller": "VitrineController",
+      "handler": "buscar",
+      "verb": "GET",
+      "path": "/v1/marketplace/busca",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/common/health.controller.ts",
+      "line": 89,
+      "controller": "HealthController",
+      "handler": "vivo",
+      "verb": "GET",
+      "path": "/health",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/common/health.controller.ts",
+      "line": 94,
+      "controller": "HealthController",
+      "handler": "pronto",
+      "verb": "GET",
+      "path": "/health/pronto",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/media/media.controller.ts",
+      "line": 19,
+      "controller": "MediaController",
+      "handler": "imagem",
+      "verb": "GET",
+      "path": "/media/:tenantId/:arquivo",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 211,
+      "controller": "PlataformaAuthController",
+      "handler": "login",
+      "verb": "POST",
+      "path": "/v1/plataforma/login",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 256,
+      "controller": "PlataformaController",
+      "handler": "logout",
+      "verb": "POST",
+      "path": "/v1/plataforma/logout",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 265,
+      "controller": "PlataformaController",
+      "handler": "planos",
+      "verb": "GET",
+      "path": "/v1/plataforma/planos",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 270,
+      "controller": "PlataformaController",
+      "handler": "barbearias",
+      "verb": "GET",
+      "path": "/v1/plataforma/barbearias",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 294,
+      "controller": "PlataformaController",
+      "handler": "plano",
+      "verb": "PUT",
+      "path": "/v1/plataforma/barbearias/:tenantId/plano",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 311,
+      "controller": "PlataformaController",
+      "handler": "listaDeAssinaturas",
+      "verb": "GET",
+      "path": "/v1/plataforma/assinaturas",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 317,
+      "controller": "PlataformaController",
+      "handler": "assinatura",
+      "verb": "GET",
+      "path": "/v1/plataforma/barbearias/:tenantId/assinatura",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 326,
+      "controller": "PlataformaController",
+      "handler": "cancelar",
+      "verb": "POST",
+      "path": "/v1/plataforma/barbearias/:tenantId/cancelamento",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 341,
+      "controller": "PlataformaController",
+      "handler": "reativar",
+      "verb": "DELETE",
+      "path": "/v1/plataforma/barbearias/:tenantId/cancelamento",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 358,
+      "controller": "PlataformaController",
+      "handler": "emCobranca",
+      "verb": "GET",
+      "path": "/v1/plataforma/faturas",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 364,
+      "controller": "PlataformaController",
+      "handler": "extrato",
+      "verb": "GET",
+      "path": "/v1/plataforma/barbearias/:tenantId/faturas",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 378,
+      "controller": "PlataformaController",
+      "handler": "pagar",
+      "verb": "POST",
+      "path": "/v1/plataforma/faturas/:faturaId/pagamento",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 397,
+      "controller": "PlataformaController",
+      "handler": "anular",
+      "verb": "DELETE",
+      "path": "/v1/plataforma/faturas/:faturaId",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 423,
+      "controller": "PlataformaController",
+      "handler": "meio",
+      "verb": "GET",
+      "path": "/v1/plataforma/barbearias/:tenantId/cobranca",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 454,
+      "controller": "PlataformaController",
+      "handler": "franquias",
+      "verb": "GET",
+      "path": "/v1/plataforma/franquias",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 459,
+      "controller": "PlataformaController",
+      "handler": "casasDaRede",
+      "verb": "GET",
+      "path": "/v1/plataforma/franquias/:franquiaId/casas",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 471,
+      "controller": "PlataformaController",
+      "handler": "montarFranquia",
+      "verb": "POST",
+      "path": "/v1/plataforma/franquias",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 495,
+      "controller": "PlataformaController",
+      "handler": "porNaFranquia",
+      "verb": "POST",
+      "path": "/v1/plataforma/franquias/:franquiaId/casas",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 510,
+      "controller": "PlataformaController",
+      "handler": "tirarDaFranquia",
+      "verb": "DELETE",
+      "path": "/v1/plataforma/franquias/casas/:tenantId",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 531,
+      "controller": "PlataformaController",
+      "handler": "destaques",
+      "verb": "GET",
+      "path": "/v1/plataforma/destaques",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 542,
+      "controller": "PlataformaController",
+      "handler": "venderDestaqueNaConta",
+      "verb": "POST",
+      "path": "/v1/plataforma/barbearias/:tenantId/destaques",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 568,
+      "controller": "PlataformaController",
+      "handler": "cancelarDestaqueVendido",
+      "verb": "POST",
+      "path": "/v1/plataforma/destaques/:anuncioId/cancelamento",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 591,
+      "controller": "PlataformaController",
+      "handler": "contestacoes",
+      "verb": "GET",
+      "path": "/v1/plataforma/contestacoes",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 596,
+      "controller": "PlataformaController",
+      "handler": "reverter",
+      "verb": "POST",
+      "path": "/v1/plataforma/contestacoes/:atribuicaoId/reversao",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 619,
+      "controller": "PlataformaController",
+      "handler": "definirComissao",
+      "verb": "PUT",
+      "path": "/v1/plataforma/barbearias/:tenantId/marketplace",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 634,
+      "controller": "PlataformaController",
+      "handler": "salvarMeio",
+      "verb": "PUT",
+      "path": "/v1/plataforma/barbearias/:tenantId/cobranca",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 658,
+      "controller": "PlataformaController",
+      "handler": "estornar",
+      "verb": "POST",
+      "path": "/v1/plataforma/barbearias/:tenantId/estorno",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 691,
+      "controller": "PlataformaController",
+      "handler": "bloquear",
+      "verb": "POST",
+      "path": "/v1/plataforma/barbearias/:tenantId/bloqueio",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 709,
+      "controller": "PlataformaController",
+      "handler": "desbloquear",
+      "verb": "DELETE",
+      "path": "/v1/plataforma/barbearias/:tenantId/bloqueio",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 724,
+      "controller": "PlataformaController",
+      "handler": "metricas",
+      "verb": "GET",
+      "path": "/v1/plataforma/metricas",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 737,
+      "controller": "PlataformaController",
+      "handler": "linhaDoTempo",
+      "verb": "GET",
+      "path": "/v1/plataforma/linha-do-tempo",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 742,
+      "controller": "PlataformaController",
+      "handler": "saude",
+      "verb": "GET",
+      "path": "/v1/plataforma/saude",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 750,
+      "controller": "PlataformaController",
+      "handler": "mfa",
+      "verb": "GET",
+      "path": "/v1/plataforma/mfa",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 758,
+      "controller": "PlataformaController",
+      "handler": "cadastrarMfa",
+      "verb": "POST",
+      "path": "/v1/plataforma/mfa",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 780,
+      "controller": "PlataformaController",
+      "handler": "confirmarMfa",
+      "verb": "POST",
+      "path": "/v1/plataforma/mfa/confirmar",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 793,
+      "controller": "PlataformaController",
+      "handler": "provarMfa",
+      "verb": "POST",
+      "path": "/v1/plataforma/mfa/provar",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 812,
+      "controller": "PlataformaController",
+      "handler": "recursos",
+      "verb": "GET",
+      "path": "/v1/plataforma/recursos",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 817,
+      "controller": "PlataformaController",
+      "handler": "recursosDa",
+      "verb": "GET",
+      "path": "/v1/plataforma/barbearias/:tenantId/recursos",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 824,
+      "controller": "PlataformaController",
+      "handler": "definirRecursoDa",
+      "verb": "PUT",
+      "path": "/v1/plataforma/barbearias/:tenantId/recursos",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 841,
+      "controller": "PlataformaController",
+      "handler": "suporte",
+      "verb": "GET",
+      "path": "/v1/plataforma/suporte",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 853,
+      "controller": "PlataformaController",
+      "handler": "entrarNaConta",
+      "verb": "POST",
+      "path": "/v1/plataforma/barbearias/:tenantId/suporte",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 880,
+      "controller": "PlataformaController",
+      "handler": "sairDaConta",
+      "verb": "DELETE",
+      "path": "/v1/plataforma/barbearias/:tenantId/suporte",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/plataforma.controller.ts",
+      "line": 898,
+      "controller": "PlataformaController",
+      "handler": "trilha",
+      "verb": "GET",
+      "path": "/v1/plataforma/trilha",
+      "guards": [
+        "PlataformaGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/stripe-webhook.controller.ts",
+      "line": 101,
+      "controller": "StripeWebhookController",
+      "handler": "receber",
+      "verb": "POST",
+      "path": "/v1/webhooks/stripe",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/webhook.controller.ts",
+      "line": 69,
+      "controller": "WebhookDoPspController",
+      "handler": "receber",
+      "verb": "POST",
+      "path": "/v1/webhooks/psp",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/whatsapp-webhook.controller.ts",
+      "line": 148,
+      "controller": "WhatsAppWebhookController",
+      "handler": "verificar",
+      "verb": "GET",
+      "path": "/v1/webhooks/whatsapp",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/plataforma/whatsapp-webhook.controller.ts",
+      "line": 161,
+      "controller": "WhatsAppWebhookController",
+      "handler": "receber",
+      "verb": "POST",
+      "path": "/v1/webhooks/whatsapp",
+      "guards": [],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/publica/publica.controller.ts",
+      "line": 53,
+      "controller": "PublicaController",
+      "handler": "barbearia",
+      "verb": "GET",
+      "path": "/v1/publica/barbearia",
+      "guards": [
+        "ChaveGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/publica/publica.controller.ts",
+      "line": 72,
+      "controller": "PublicaController",
+      "handler": "servicos",
+      "verb": "GET",
+      "path": "/v1/publica/servicos",
+      "guards": [
+        "ChaveGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/publica/publica.controller.ts",
+      "line": 97,
+      "controller": "PublicaController",
+      "handler": "disponibilidade",
+      "verb": "GET",
+      "path": "/v1/publica/disponibilidade",
+      "guards": [
+        "ChaveGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    },
+    {
+      "file": "apps/api/src/publica/publica.controller.ts",
+      "line": 132,
+      "controller": "PublicaController",
+      "handler": "agendar",
+      "verb": "POST",
+      "path": "/v1/publica/agendamentos",
+      "guards": [
+        "ChaveGuard"
+      ],
+      "permission": null,
+      "feature": [],
+      "proof_status": "Inventariado; correlacionar com evidências, não implica rota testada"
+    }
+  ],
+  "pages": [
+    "apps/web/src/app/[slug]/agendado/[id]/page.tsx",
+    "apps/web/src/app/[slug]/agendar/page.tsx",
+    "apps/web/src/app/[slug]/b/[barbeiro]/page.tsx",
+    "apps/web/src/app/[slug]/conversar/page.tsx",
+    "apps/web/src/app/[slug]/entrar/page.tsx",
+    "apps/web/src/app/[slug]/falar/page.tsx",
+    "apps/web/src/app/[slug]/fila/[token]/page.tsx",
+    "apps/web/src/app/[slug]/meus-agendamentos/[id]/remarcar/page.tsx",
+    "apps/web/src/app/[slug]/meus-agendamentos/page.tsx",
+    "apps/web/src/app/[slug]/page.tsx",
+    "apps/web/src/app/[slug]/vaga/[token]/page.tsx",
+    "apps/web/src/app/admin/agenda/page.tsx",
+    "apps/web/src/app/admin/assistente/page.tsx",
+    "apps/web/src/app/admin/automacoes/page.tsx",
+    "apps/web/src/app/admin/avaliacoes/page.tsx",
+    "apps/web/src/app/admin/avisos/page.tsx",
+    "apps/web/src/app/admin/caixa/page.tsx",
+    "apps/web/src/app/admin/campanhas/page.tsx",
+    "apps/web/src/app/admin/catalogo/diagnostico/page.tsx",
+    "apps/web/src/app/admin/catalogo/page.tsx",
+    "apps/web/src/app/admin/chaves/page.tsx",
+    "apps/web/src/app/admin/cliente/[id]/page.tsx",
+    "apps/web/src/app/admin/clientes/page.tsx",
+    "apps/web/src/app/admin/clube/page.tsx",
+    "apps/web/src/app/admin/comanda/[id]/page.tsx",
+    "apps/web/src/app/admin/comanda/page.tsx",
+    "apps/web/src/app/admin/comissao/page.tsx",
+    "apps/web/src/app/admin/comissao/regras/page.tsx",
+    "apps/web/src/app/admin/configuracoes/page.tsx",
+    "apps/web/src/app/admin/criar-conta/page.tsx",
+    "apps/web/src/app/admin/dia/marcar/page.tsx",
+    "apps/web/src/app/admin/dia/page.tsx",
+    "apps/web/src/app/admin/dre/page.tsx",
+    "apps/web/src/app/admin/entrar/page.tsx",
+    "apps/web/src/app/admin/equipe/page.tsx",
+    "apps/web/src/app/admin/equipe/permissoes/page.tsx",
+    "apps/web/src/app/admin/estoque/page.tsx",
+    "apps/web/src/app/admin/fiado/page.tsx",
+    "apps/web/src/app/admin/fidelidade/page.tsx",
+    "apps/web/src/app/admin/fila/page.tsx",
+    "apps/web/src/app/admin/financeiro/page.tsx",
+    "apps/web/src/app/admin/fiscal/page.tsx",
+    "apps/web/src/app/admin/fotos/page.tsx",
+    "apps/web/src/app/admin/franquia/page.tsx",
+    "apps/web/src/app/admin/importar/page.tsx",
+    "apps/web/src/app/admin/lgpd/page.tsx",
+    "apps/web/src/app/admin/meu-dia/page.tsx",
+    "apps/web/src/app/admin/meus-numeros/page.tsx",
+    "apps/web/src/app/admin/onboarding/page.tsx",
+    "apps/web/src/app/admin/pacotes/page.tsx",
+    "apps/web/src/app/admin/page.tsx",
+    "apps/web/src/app/admin/painel/page.tsx",
+    "apps/web/src/app/admin/plano/page.tsx",
+    "apps/web/src/app/admin/precos/page.tsx",
+    "apps/web/src/app/admin/profissionais/page.tsx",
+    "apps/web/src/app/admin/recados/page.tsx",
+    "apps/web/src/app/admin/recepcao/page.tsx",
+    "apps/web/src/app/admin/recursos/page.tsx",
+    "apps/web/src/app/admin/rede/page.tsx",
+    "apps/web/src/app/admin/retencao/page.tsx",
+    "apps/web/src/app/admin/seguranca/page.tsx",
+    "apps/web/src/app/admin/trilha/page.tsx",
+    "apps/web/src/app/admin/trocar-senha/page.tsx",
+    "apps/web/src/app/admin/unidades/page.tsx",
+    "apps/web/src/app/admin/webhooks/page.tsx",
+    "apps/web/src/app/admin/whatsapp/page.tsx",
+    "apps/web/src/app/buscar/page.tsx",
+    "apps/web/src/app/pagamento/page.tsx",
+    "apps/web/src/app/page.tsx",
+    "apps/web/src/app/plataforma/assinaturas/page.tsx",
+    "apps/web/src/app/plataforma/destaques/page.tsx",
+    "apps/web/src/app/plataforma/entrar/page.tsx",
+    "apps/web/src/app/plataforma/faturas/page.tsx",
+    "apps/web/src/app/plataforma/franquias/page.tsx",
+    "apps/web/src/app/plataforma/metricas/page.tsx",
+    "apps/web/src/app/plataforma/page.tsx",
+    "apps/web/src/app/plataforma/seguranca/page.tsx",
+    "apps/web/src/app/plataforma/trilha/page.tsx",
+    "apps/web/src/app/privacidade/page.tsx",
+    "apps/web/src/app/termos/page.tsx"
+  ],
+  "packages": [
+    {
+      "path": "apps/api",
+      "name": "@barbearia/api",
+      "dependencies": {
+        "@barbearia/catalog": "workspace:*",
+        "@barbearia/core": "workspace:*",
+        "@barbearia/crm": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/finance": "workspace:*",
+        "@barbearia/identity": "workspace:*",
+        "@barbearia/jobs": "workspace:*",
+        "@barbearia/onboarding": "workspace:*",
+        "@barbearia/platform": "workspace:*",
+        "@barbearia/scheduling": "workspace:*",
+        "@nestjs/common": "^11.1.6",
+        "@nestjs/core": "^11.1.6",
+        "@nestjs/platform-express": "^11.1.6",
+        "@nestjs/throttler": "^6.4.0",
+        "reflect-metadata": "^0.2.2",
+        "rxjs": "^7.8.2",
+        "zod": "^3.24.1"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "apps/web",
+      "name": "@barbearia/web",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/ui": "workspace:*",
+        "next": "^15.1.3",
+        "qrcode-generator": "^2.0.4",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+      },
+      "test": "vitest run"
+    },
+    {
+      "path": "apps/worker",
+      "name": "@barbearia/worker",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/crm": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/finance": "workspace:*",
+        "@barbearia/identity": "workspace:*",
+        "@barbearia/jobs": "workspace:*",
+        "@barbearia/platform": "workspace:*",
+        "@barbearia/scheduling": "workspace:*"
+      },
+      "test": null
+    },
+    {
+      "path": "packages/catalog",
+      "name": "@barbearia/catalog",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/identity": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/core",
+      "name": "@barbearia/core",
+      "dependencies": {},
+      "test": "vitest run"
+    },
+    {
+      "path": "packages/crm",
+      "name": "@barbearia/crm",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/identity": "workspace:*",
+        "@barbearia/jobs": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/db",
+      "name": "@barbearia/db",
+      "dependencies": {
+        "@prisma/client": "^6.19.1",
+        "pg": "^8.16.3"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/finance",
+      "name": "@barbearia/finance",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/identity": "workspace:*",
+        "@barbearia/jobs": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/identity",
+      "name": "@barbearia/identity",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/jobs",
+      "name": "@barbearia/jobs",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/onboarding",
+      "name": "@barbearia/onboarding",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/identity": "workspace:*",
+        "@barbearia/scheduling": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/platform",
+      "name": "@barbearia/platform",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/identity": "workspace:*",
+        "@barbearia/jobs": "workspace:*",
+        "@barbearia/scheduling": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/scheduling",
+      "name": "@barbearia/scheduling",
+      "dependencies": {
+        "@barbearia/core": "workspace:*",
+        "@barbearia/db": "workspace:*",
+        "@barbearia/jobs": "workspace:*"
+      },
+      "test": "./scripts/test.sh"
+    },
+    {
+      "path": "packages/ui",
+      "name": "@barbearia/ui",
+      "dependencies": {},
+      "test": "vitest run"
+    }
+  ],
+  "migrations": [
+    "packages/db/migrations/0001_scheduling.sql",
+    "packages/db/migrations/0002_app_role.sql",
+    "packages/db/migrations/0003_appointment_resources.sql",
+    "packages/db/migrations/0004_public_slug_lookup.sql",
+    "packages/db/migrations/0005_identity.sql",
+    "packages/db/migrations/0006_guest_booking.sql",
+    "packages/db/migrations/0007_public_profile.sql",
+    "packages/db/migrations/0008_change_window.sql",
+    "packages/db/migrations/0009_block_exception.sql",
+    "packages/db/migrations/0010_block_needs_range.sql",
+    "packages/db/migrations/0011_combo_sold_as_service.sql",
+    "packages/db/migrations/0012_staff.sql",
+    "packages/db/migrations/0013_onboarding.sql",
+    "packages/db/migrations/0014_attendance.sql",
+    "packages/db/migrations/0015_counter_search.sql",
+    "packages/db/migrations/0016_rbac.sql",
+    "packages/db/migrations/0017_fila.sql",
+    "packages/db/migrations/0018_comanda_caixa.sql",
+    "packages/db/migrations/0019_comissao.sql",
+    "packages/db/migrations/0020_fila_de_trabalho.sql",
+    "packages/db/migrations/0021_ficha_do_cliente.sql",
+    "packages/db/migrations/0022_metas.sql",
+    "packages/db/migrations/0023_tolerancia_do_combo.sql",
+    "packages/db/migrations/0024_trilha_por_acao.sql",
+    "packages/db/migrations/0025_importacao_de_base.sql",
+    "packages/db/migrations/0026_plataforma.sql",
+    "packages/db/migrations/0027_metricas_da_plataforma.sql",
+    "packages/db/migrations/0028_flags_e_impersonacao.sql",
+    "packages/db/migrations/0029_assinatura.sql",
+    "packages/db/migrations/0030_cobranca.sql",
+    "packages/db/migrations/0031_psp.sql",
+    "packages/db/migrations/0032_rbac_editavel.sql",
+    "packages/db/migrations/0033_lgpd_consentimento.sql",
+    "packages/db/migrations/0034_lgpd_retencao.sql",
+    "packages/db/migrations/0035_seguranca.sql",
+    "packages/db/migrations/0036_cobranca_sem_id_vazio.sql",
+    "packages/db/migrations/0037_cobranca_da_comanda.sql",
+    "packages/db/migrations/0038_taxa_do_adquirente.sql",
+    "packages/db/migrations/0039_sinal_seletivo.sql",
+    "packages/db/migrations/0040_segundo_fator_opcional.sql",
+    "packages/db/migrations/0041_lista_de_espera.sql",
+    "packages/db/migrations/0042_oferta_de_vaga.sql",
+    "packages/db/migrations/0043_recados.sql",
+    "packages/db/migrations/0044_fidelidade.sql",
+    "packages/db/migrations/0045_pacotes.sql",
+    "packages/db/migrations/0046_avaliacoes.sql",
+    "packages/db/migrations/0047_estoque.sql",
+    "packages/db/migrations/0048_assinatura.sql",
+    "packages/db/migrations/0049_assinatura_restricoes.sql",
+    "packages/db/migrations/0050_cobranca_do_clube.sql",
+    "packages/db/migrations/0051_comissao_da_assinatura.sql",
+    "packages/db/migrations/0052_split.sql",
+    "packages/db/migrations/0053_kyc_e_liquidacao.sql",
+    "packages/db/migrations/0054_financeiro.sql",
+    "packages/db/migrations/0055_vale_dre_estorno.sql",
+    "packages/db/migrations/0056_fiscal.sql",
+    "packages/db/migrations/0057_fiscal_operacao.sql",
+    "packages/db/migrations/0058_whatsapp.sql",
+    "packages/db/migrations/0059_automacao.sql",
+    "packages/db/migrations/0060_campanhas.sql",
+    "packages/db/migrations/0061_multiunidade.sql",
+    "packages/db/migrations/0062_compartilhado.sql",
+    "packages/db/migrations/0063_score_condicional.sql",
+    "packages/db/migrations/0064_segmento.sql",
+    "packages/db/migrations/0065_recepcao.sql",
+    "packages/db/migrations/0066_precificacao.sql",
+    "packages/db/migrations/0067_vitrine.sql",
+    "packages/db/migrations/0068_proximo_horario.sql",
+    "packages/db/migrations/0069_atribuicao.sql",
+    "packages/db/migrations/0070_perfil_do_barbeiro.sql",
+    "packages/db/migrations/0071_portfolio.sql",
+    "packages/db/migrations/0072_destaque.sql",
+    "packages/db/migrations/0073_franquia.sql",
+    "packages/db/migrations/0074_franquia_indicadores.sql",
+    "packages/db/migrations/0075_api_publica.sql",
+    "packages/db/migrations/0076_webhooks.sql",
+    "packages/db/migrations/0077_contestacao.sql",
+    "packages/db/migrations/0078_isolamento.sql",
+    "packages/db/migrations/0079_revisao_lgpd.sql",
+    "packages/db/migrations/0080_plataforma_e_append_only.sql",
+    "packages/db/migrations/0081_contestacao_do_marketplace.sql",
+    "packages/db/migrations/0082_anonimizar_com_check.sql",
+    "packages/db/migrations/0083_recurso_fiscal.sql",
+    "packages/db/migrations/0084_escopos_do_whatsapp.sql",
+    "packages/db/migrations/0085_texto_escolhido.sql",
+    "packages/db/migrations/0086_publico_da_automacao.sql",
+    "packages/db/migrations/0087_toque_duplo_no_balcao.sql",
+    "packages/db/migrations/0088_texto_do_recurso_fiscal.sql",
+    "packages/db/migrations/0089_publico_do_churn.sql",
+    "packages/db/migrations/0090_comissao_por_unidade.sql",
+    "packages/db/migrations/0091_cascata_de_unidade.sql",
+    "packages/db/migrations/0092_movimento_com_unidade.sql",
+    "packages/db/migrations/0093_unidade_de_medida.sql",
+    "packages/db/migrations/0094_nota_em_voo.sql",
+    "packages/db/migrations/0095_unidade_de_insumo.sql",
+    "packages/db/migrations/0096_gorjeta_com_dono.sql",
+    "packages/db/migrations/0097_janela_ocupada.sql",
+    "packages/db/migrations/0098_meio_aceito.sql",
+    "packages/db/migrations/0099_estorno_online.sql",
+    "packages/db/migrations/0100_cobranca_paga_trava_reemissao.sql",
+    "packages/db/migrations/0101_refund_libera_nova_cobranca.sql",
+    "packages/db/migrations/0102_estorno_plataforma_recuperavel.sql",
+    "packages/db/migrations/0103_estorno_plataforma_idempotente.sql",
+    "packages/db/migrations/0104_whatsapp_avulso_idempotente.sql",
+    "packages/db/migrations/0105_kyc_recebedor_recuperavel.sql",
+    "packages/db/migrations/0106_notificacao_automatica_idempotente.sql",
+    "packages/db/migrations/0107_split_em_voo_recuperavel.sql",
+    "packages/db/migrations/0108_auditoria_profunda.sql",
+    "packages/db/migrations/0109_item_da_comanda_idempotente.sql",
+    "packages/db/migrations/0110_scheduling_concorrencia_recursos.sql",
+    "packages/db/migrations/0111_finance_estorno_concorrencia.sql",
+    "packages/db/migrations/0112_pacote_congelado_na_comanda.sql",
+    "packages/db/migrations/0113_crm_whatsapp_concorrencia.sql",
+    "packages/db/migrations/0114_catalogo_estrutura_onboarding.sql",
+    "packages/db/migrations/0115_platform_jobs_integracoes.sql",
+    "packages/db/migrations/0116_recheck_final_hardening.sql",
+    "packages/db/migrations/0117_anonimizacao_alcanca_intencoes.sql",
+    "packages/db/migrations/0118_aviso_de_link_atualizado.sql",
+    "packages/db/migrations/0119_comodidade_com_check.sql"
+  ]
+}

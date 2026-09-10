@@ -159,6 +159,7 @@ export async function automacoesDaCasa(tenantId: string): Promise<readonly Autom
 
 export async function salvarAutomacao(params: {
   readonly tenantId: string;
+  readonly locationId?: string;
   readonly id?: string;
   readonly nome: string;
   readonly gatilho: Gatilho;
@@ -247,6 +248,7 @@ export async function salvarAutomacao(params: {
       const doTexto = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
         SELECT kind::text AS kind FROM whatsapp_templates
          WHERE id = ${params.templateId}::uuid
+           AND (${params.locationId ?? null}::uuid IS NULL OR location_id = ${params.locationId ?? null}::uuid)
       `;
       const achado = doTexto[0];
       if (!achado) throw new AutomacaoError('invalida', 'Este texto não existe.');
@@ -508,9 +510,10 @@ export async function varrerAutomacoes(params: {
   readonly timeZone: string;
 }): Promise<ResultadoDaAutomacao> {
   return withTenant(params.tenantId, async (tx) => {
-    const regras = await tx.$queryRaw<Parameters<typeof paraTela>[0][]>(sql`
-      SELECT ${COLUNAS}, NULL AS texto_titulo, 0 AS enviadas, 0 AS alcancadas
-        FROM automations a WHERE a.active
+    const regras = await tx.$queryRaw<(Parameters<typeof paraTela>[0] & { timezone: string | null })[]>(sql`
+      SELECT ${COLUNAS}, NULL AS texto_titulo, 0 AS enviadas, 0 AS alcancadas, l.timezone
+        FROM automations a LEFT JOIN whatsapp_templates w ON w.id = a.template_id
+        LEFT JOIN locations l ON l.id = w.location_id WHERE a.active
     `);
 
     let marcados = 0;
@@ -541,6 +544,7 @@ export async function varrerAutomacoes(params: {
 
     for (const bruta of regras) {
       const regra = paraTela(bruta);
+      const timeZone = bruta.timezone ?? params.timeZone;
       const lista = await candidatos(tx, regra.gatilho, regra.limiar, params.agora);
       if (lista.length === 0) continue;
 
@@ -569,8 +573,8 @@ export async function varrerAutomacoes(params: {
       >`
         SELECT c.id AS customer_id,
                count(n.id) FILTER (
-                 WHERE (n.sent_at AT TIME ZONE ${params.timeZone})::date
-                     = (${params.agora}::timestamptz AT TIME ZONE ${params.timeZone})::date
+                 WHERE (n.sent_at AT TIME ZONE ${timeZone})::date
+                     = (${params.agora}::timestamptz AT TIME ZONE ${timeZone})::date
                ) AS hoje,
                count(n.id) FILTER (
                  WHERE n.sent_at > ${params.agora}::timestamptz - interval '30 days'
@@ -619,7 +623,8 @@ export async function varrerAutomacoes(params: {
           atrasoMinutos: regra.atrasoMinutos,
           fatoEm: candidato.fatoEm,
           agora: params.agora,
-          timeZone: params.timeZone,
+          timeZone,
+          natureza: 'promocional',
         });
 
         /**
@@ -651,6 +656,8 @@ export async function varrerAutomacoes(params: {
 
 export interface DisparoAEnviar {
   readonly id: string;
+  readonly locationId: string;
+  readonly timeZone: string;
   readonly customerId: string;
   readonly tipo: TipoDeNotificacao;
   /**
@@ -677,6 +684,8 @@ export async function disparosAEnviar(
     const linhas = await tx.$queryRaw<
       {
         id: string;
+        location_id: string;
+        timezone: string;
         customer_id: string;
         kind: TipoDeNotificacao;
         template_id: string | null;
@@ -685,12 +694,15 @@ export async function disparosAEnviar(
         barbearia: string;
       }[]
     >`
-      SELECT s.id, s.customer_id, a.kind::text AS kind, a.template_id, c.phone_e164, c.name,
+      SELECT l.id AS location_id, l.timezone, s.id, s.customer_id, a.kind::text AS kind, a.template_id, c.phone_e164, c.name,
              t.name AS barbearia
         FROM automation_sends s
         JOIN automations a ON a.id = s.automation_id
         JOIN customers c ON c.id = s.customer_id
         JOIN tenants t ON t.id = s.tenant_id
+        LEFT JOIN whatsapp_templates w ON w.id = a.template_id
+        JOIN LATERAL (SELECT id, timezone FROM locations
+          WHERE (a.template_id IS NULL OR id = w.location_id) ORDER BY created_at, id LIMIT 1) l ON true
        WHERE s.sent_at IS NULL AND s.skipped_reason IS NULL
          AND s.scheduled_for <= ${agora}::timestamptz
          AND c.phone_e164 IS NOT NULL
@@ -699,6 +711,8 @@ export async function disparosAEnviar(
     `;
     return linhas.map((l) => ({
       id: l.id,
+      locationId: l.location_id,
+      timeZone: l.timezone,
       customerId: l.customer_id,
       tipo: l.kind,
       templateId: l.template_id,
@@ -771,13 +785,6 @@ export async function confirmarDisparoDaAutomacao(params: {
     const disparo = linhas[0];
     if (!disparo) return false;
 
-    const afetadas = await tx.$executeRaw`
-      UPDATE automation_sends SET sent_at = ${params.agora}
-       WHERE id = ${params.disparoId}::uuid
-         AND sent_at IS NULL AND skipped_reason IS NULL
-    `;
-    if (afetadas !== 1) return false;
-
     const confirmou = await confirmarDisparoPromocional(tx, {
       intentKey: `promo:automacao:${params.disparoId}`,
       tipo: disparo.kind,
@@ -786,6 +793,15 @@ export async function confirmarDisparoDaAutomacao(params: {
       enviadoEm: params.agora,
     });
     if (!confirmou) throw new Error('reserva promocional da automação não pôde ser confirmada');
+
+    const afetadas = await tx.$executeRaw`
+      UPDATE automation_sends SET sent_at = ${params.agora}
+       WHERE id = ${params.disparoId}::uuid
+         AND sent_at IS NULL AND skipped_reason IS NULL
+    `;
+    if (afetadas !== 1) return false;
+
+
     return true;
   });
 }

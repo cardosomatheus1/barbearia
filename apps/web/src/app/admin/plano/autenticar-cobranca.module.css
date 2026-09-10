@@ -1,0 +1,7 @@
+.confirmacao {
+  inline-size: 15rem;
+  max-inline-size: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.confirmacao p:empty { display: none; }

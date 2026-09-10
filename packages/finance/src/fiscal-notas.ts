@@ -15,6 +15,9 @@ import { inteiroSeguroDoBanco } from './inteiro-seguro.js';
 import { configuracaoFiscal } from './fiscal-configuracao.js';
 import { recusar } from './fiscal-erros.js';
 import { modoFiscal } from './fiscal-emissor.js';
+import { situacaoNfse } from './nfse/configuracao.js';
+import { prepararDocumentoNfse } from './nfse/documentos.js';
+import { NfseError } from './nfse/erros.js';
 
 export interface NotaNaTela {
   readonly id: string;
@@ -23,6 +26,8 @@ export interface NotaNaTela {
   readonly numero: string | null;
   readonly linkPdf: string | null;
   readonly motivoDaRecusa: string | null;
+  readonly xmlDisponivel?: boolean;
+  readonly avisoOperacional?: string | null;
   readonly regime: RegimeFiscal;
   readonly servicoCents: number;
   readonly issBps: number;
@@ -45,6 +50,8 @@ const paraTela = (l: {
   number: string | null;
   pdf_url: string | null;
   rejection_reason: string | null;
+  xml_available: boolean;
+  operational_error: string | null;
   regime: RegimeFiscal;
   service_cents: number;
   partner_cents: number;
@@ -57,8 +64,13 @@ const paraTela = (l: {
   orderId: l.order_id,
   estado: l.status,
   numero: l.number,
-  linkPdf: l.pdf_url,
+  linkPdf: l.pdf_url && l.xml_available ? `/admin/fiscal/notas/${l.id}/pdf` : l.pdf_url,
   motivoDaRecusa: l.rejection_reason,
+  xmlDisponivel: l.xml_available,
+  avisoOperacional: l.operational_error === 'nfse_municipio_sem_emissor_nacional'
+    ? 'Este município exige seu emissor municipal para este regime. A integração municipal ainda precisa ser implementada.'
+    : l.operational_error?.startsWith('nfse_certificado') ? 'Confira ou renove o certificado A1 da unidade.'
+    : l.operational_error ? 'A comunicação fiscal está pendente. O sistema consultará a nota novamente.' : null,
   regime: l.regime,
   servicoCents: l.service_cents,
   issBps: l.iss_bps,
@@ -69,7 +81,9 @@ const paraTela = (l: {
 
 const COLUNAS = sql`id, order_id, status::text AS status, number, pdf_url, rejection_reason,
                     regime::text AS regime, service_cents, partner_cents, iss_bps,
-                    customer_name, requested_at, created_by_name`;
+                    customer_name, requested_at, created_by_name,
+                    EXISTS (SELECT 1 FROM fiscal_native_documents nd WHERE nd.invoice_id = fiscal_invoices.id AND nd.nfse_cipher IS NOT NULL) AS xml_available,
+                    (SELECT nd.last_error_code FROM fiscal_native_documents nd WHERE nd.invoice_id = fiscal_invoices.id) AS operational_error`;
 
 export async function notasDoPeriodo(params: {
   readonly tenantId: string;
@@ -111,7 +125,7 @@ export async function notasDoPeriodo(params: {
     return linhas.map((l) => {
       const nota = params.podeVerCliente
         ? paraTela(l)
-        : { ...paraTela(l), clienteNome: null };
+        : { ...paraTela(l), clienteNome: null, xmlDisponivel: false, linkPdf: null };
       return params.comRepartição
         ? {
             ...nota,
@@ -190,6 +204,15 @@ export async function pedirNota(
   if (modoFiscal() === 'nenhum') {
     if (params.automatica) return null;
     recusar('fiscal_indisponivel');
+  }
+
+  if (modoFiscal() === 'nacional') {
+    await tx.$queryRaw`SELECT location_id FROM fiscal_settings WHERE location_id = ${params.locationId}::uuid FOR UPDATE`;
+    const situacao = await situacaoNfse(params.tenantId, params.locationId, new Date(), tx);
+    if (!situacao.pronta) {
+      if (params.automatica) return null;
+      throw new NfseError('nfse_nao_configurada', situacao.motivo ?? 'Confira a configuração fiscal.');
+    }
   }
 
   const config = await configuracaoFiscal(params.tenantId, params.locationId, tx);
@@ -325,6 +348,7 @@ export async function pedirNota(
   `;
   const criada = criadas[0];
   if (!criada) return null;
+  if (modoFiscal() === 'nacional') await prepararDocumentoNfse(tx, params.tenantId, criada.id);
 
   await enfileirarPara(tx, params.tenantId, {
     kind: 'fiscal.emitir',

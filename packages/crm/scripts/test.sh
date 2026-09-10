@@ -28,4 +28,4 @@ export APP_DATABASE_URL="$DATABASE_URL"
 # nenhuma no repositório. O código falha alto sem ela, que é o que se quer.
 export WHATSAPP_TOKEN_KEY="${WHATSAPP_TOKEN_KEY:-$(openssl rand -base64 32)}"
 export SEED_DATABASE_URL="$BASE/$DB_NAME"
-exec vitest run "$@"
+vitest run "$@"

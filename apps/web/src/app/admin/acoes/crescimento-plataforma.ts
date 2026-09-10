@@ -474,7 +474,7 @@ export async function acaoCancelarNota(form: FormData): Promise<void> {
   const token = await exigirSessao();
   const resultado = await cancelarNotaNaApi(token, texto(form, 'notaId'), texto(form, 'motivo'));
   if (!resultado.ok) return falhar(ROTA_FISCAL, resultado);
-  redirect(`${ROTA_FISCAL}?feito=nota-cancelada`);
+  redirect(`${ROTA_FISCAL}?feito=${resultado.dados.estado === 'cancelando' ? 'cancelamento-pedido' : 'nota-cancelada'}`);
 }
 
 // -- Multiunidade (bloco 58) --------------------------------------------------

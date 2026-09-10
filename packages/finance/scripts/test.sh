@@ -30,4 +30,4 @@ export SEED_DATABASE_URL="$BASE/$DB_NAME"
 # declara o modo — que é o que o interruptor existe para obrigar.
 export FISCAL_MODO="${FISCAL_MODO:-fake}"
 
-exec vitest run "$@"
+vitest run "$@"

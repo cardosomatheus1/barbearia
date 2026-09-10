@@ -1,11 +1,14 @@
 import { Controller, Headers, Post, Req } from '@nestjs/common';
 import type { Request } from 'express';
 import {
-  aplicarEvento,
+  conciliarEventoDeFaturaStripe,
   conferirAssinaturaDoWebhook,
   estadoDoPagamento,
   WebhookInvalido,
   adquirenteDaComanda,
+  cobrancaDaComandaDisponivel,
+  confirmarCadastroDeCartao,
+  modoDoAdquirente,
 } from '@barbearia/platform';
 import { confirmarCobranca } from '@barbearia/finance';
 import { primaryLocation } from '@barbearia/scheduling';
@@ -70,13 +73,15 @@ const eventoDaStripe = z.object({
       id: z.string().trim().min(1).max(200),
       status: z.string().trim().max(60).optional(),
       payment_status: z.string().trim().max(60).optional(),
-      payment_intent: z.string().trim().max(200).optional(),
-      last_payment_error: z.object({ code: z.string().max(120).optional() }).optional(),
+      payment_intent: z.string().trim().max(200).nullish(),
+      mode: z.string().max(30).optional(),
+      last_payment_error: z.object({ code: z.string().max(120).optional() }).nullish(),
       metadata: z
         .object({
           tenant_id: z.string().uuid().optional(),
           order_id: z.string().uuid().optional(),
           fatura_id: z.string().uuid().optional(),
+          cadastro_id: z.string().uuid().optional(),
         })
         .optional(),
     }),
@@ -137,22 +142,22 @@ export class StripeWebhookController {
     const evento = analisado.data;
     const objeto = evento.data.object;
 
+    if (objeto.mode === 'setup' && objeto.metadata?.cadastro_id &&
+      ['checkout.session.completed', 'checkout.session.expired'].includes(evento.type)) {
+      if (modoDoAdquirente() !== 'stripe') return { desfecho: 'ignorado' };
+      return { desfecho: await confirmarCadastroDeCartao(objeto.id) };
+    }
+
     // A mensalidade da barbearia (bloco 29) chega pelo mesmo endereço, e é
     // reconhecida pelo metadado que a régua manda. Ela segue pelo caminho que
     // já existe, sem uma segunda máquina de estados.
     if (objeto.metadata?.fatura_id) {
-      const tipo = TIPO_DA_FATURA[evento.type];
-      if (!tipo) return { desfecho: 'ignorado' };
-      return {
-        desfecho: await aplicarEvento({
-          eventoId: evento.id,
-          tipo,
-          chargeId: objeto.id,
-          payload: { origem: 'stripe', tipo: evento.type },
-        }),
-      };
+      if (!TIPO_DA_FATURA[evento.type] || !objeto.metadata.tenant_id) return { desfecho: 'ignorado' };
+      return { desfecho: await conciliarEventoDeFaturaStripe({ eventoId:evento.id,
+        tenantId:objeto.metadata.tenant_id,faturaId:objeto.metadata.fatura_id,chargeId:objeto.id }) };
     }
 
+    if (!cobrancaDaComandaDisponivel()) return { desfecho: 'ignorado' };
     const tenantId = objeto.metadata?.tenant_id;
     if (!tenantId || !objeto.metadata?.order_id) return { desfecho: 'ignorado' };
 
@@ -207,7 +212,7 @@ export class StripeWebhookController {
 function estadoDaStripe(evento: EventoDaStripe): 'pago' | 'recusado' | 'expirado' | null {
   const objeto = evento.data.object;
 
-  if (evento.type === 'checkout.session.completed') {
+  if (evento.type === 'checkout.session.completed' || evento.type === 'checkout.session.async_payment_succeeded') {
     return objeto.payment_status === 'paid' ? 'pago' : null;
   }
   if (evento.type === 'checkout.session.expired') return 'expirado';

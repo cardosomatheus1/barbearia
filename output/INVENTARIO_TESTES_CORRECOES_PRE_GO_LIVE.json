@@ -1,0 +1,1926 @@
+{
+  "arquivos": 380,
+  "inventario": [
+    {
+      "arquivo": "apps/api/src/common/turnstile.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/src/media/storage.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/admin.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/agenda.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/agente.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/ataque.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/auth.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/availability.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/board.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/booking-http.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/cabecalhos.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/caixa.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/caminho-inteiro.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/catalogo.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/chave.guard.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/data-na-borda.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/fidelidade.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/fila.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/health.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/importacao.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/keep-alive.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/lgpd.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/log-http.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/log.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/metrica.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/painel.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/permissao.guard.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/pix.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/plataforma.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/plataforma.guard.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/profile.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/proxy-rate-limit.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/publica.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/rate-limit.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/recado.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/team.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/api/test/vaga.e2e.test.ts",
+      "runner": "pnpm --filter @barbearia/api test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/casco.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/equipe/permissoes/grupos.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/importar/conflitos.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/nome-do-menu.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/previa-da-mensagem.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/rascunho-do-formulario.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/rotulo-do-campo.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/saida-da-tela.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/admin/vocabulario.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/dinheiro-na-tela.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/app/globals.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/cabecalhos.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/fontes.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/agenda-timeline.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/busca-global.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/destino.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/dinheiro.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/falha-inesperada.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/jornada.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/json-ld.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/painel.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/politica.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/prazo.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/proxy-confiavel.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/qrcode.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/senha-na-url.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/sessao-gestor.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/sinal.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/texto-do-cliente-na-url.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/trilha.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "apps/web/src/lib/vaga.test.ts",
+      "runner": "pnpm --filter @barbearia/web test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/catalog/src/catalog.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/catalog test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/catalog/src/franquia.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/catalog test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/catalog/src/unidades.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/catalog test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/catalog/src/validador.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/catalog test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/agente.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/alertas.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/amostra-do-template.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/apuracao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/architecture.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/assinatura-da-plataforma.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/assinatura.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/atribuicao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/attendance.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/automacao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/availability.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/avaliacao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/barbeiro.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/bundles.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/changes.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/churn.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/cobranca.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/comanda.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/comissao-da-assinatura.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/comissao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/compartilhado.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/confiabilidade.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/consumo.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/contestacao.guard.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/crescimento.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/csv.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/desempenho.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/destaque.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/dre.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/espera.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/estoque.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/excecao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/fidelidade.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/fila.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/financeiro.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/fiscal.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/franquia.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/geo.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/imagem.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/importacao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/insight.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/interpretacao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/login.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/marketplace.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/metrica.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/meu-dia.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/multiunidade.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/notificacao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/ocupacao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/orientacao-da-meta.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/pacote.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/pagamento.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/permissoes.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/phone.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/precificacao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/prioridade.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/proximo.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/recado.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/recepcao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/rede.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/retencao.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/schedule.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/segmento.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/sinal.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/split.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/templates.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/time.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/vale.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/validador.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/vitrine.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/vocabulario.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/webhook.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/whatsapp.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/core/src/zone.test.ts",
+      "runner": "pnpm --filter @barbearia/core test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/anonimizacao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/automacao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/avaliacao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/baileys/biblioteca.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/baileys/runtime.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/baileys/semantica.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/baileys/sessao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/campanha.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/churn.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/clientes.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/clientes.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/confianca.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/ficha.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/fotos.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/importacao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/lgpd.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/recado.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/recepcao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/resolucao-de-conflito.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/segmento.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/slug-legado.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/whatsapp-assinatura.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/whatsapp-meta.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/whatsapp-signup.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/crm/src/whatsapp.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/crm test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/src/client.test.ts",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0001_scheduling.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0017_fila.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0018_comanda_caixa.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0019_comissao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0020_fila_de_trabalho.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0021_ficha_do_cliente.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0022_metas.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0023_tolerancia_do_combo.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0024_trilha_por_acao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0025_importacao_de_base.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0026_plataforma.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0027_metricas_da_plataforma.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0028_flags_e_impersonacao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0029_assinatura.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0030_cobranca.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0031_psp.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0032_rbac_editavel.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0033_lgpd_consentimento.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0034_lgpd_retencao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0035_seguranca.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0036_cobranca_sem_id_vazio.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0037_cobranca_da_comanda.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0038_taxa_do_adquirente.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0039_sinal_seletivo.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0041_lista_de_espera.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0042_oferta_de_vaga.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0043_recados.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0044_fidelidade.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0045_pacotes.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0046_avaliacoes.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0047_estoque.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0048_assinatura.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0049_assinatura_restricoes.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0050_cobranca_do_clube.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0051_comissao_da_assinatura.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0052_split.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0053_kyc_e_liquidacao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0054_financeiro.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0055_vale_dre_estorno.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0056_fiscal.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0057_fiscal_operacao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0058_whatsapp.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0061_multiunidade.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0062_compartilhado.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0063_score_condicional.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0066_precificacao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0073_franquia.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0074_franquia_indicadores.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0075_api_publica.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0076_webhooks.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0077_contestacao.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0080_cascata_global.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0084_escopos_do_whatsapp.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0110_scheduling_concorrencia_recursos.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0111_finance_estorno_concorrencia.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0112_pacote_congelado_na_comanda.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0113_crm_whatsapp_concorrencia.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0114_catalogo_estrutura_onboarding.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0115_platform_jobs_integracoes.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/0116_recheck_final_hardening.test.sql",
+      "runner": "pnpm --filter @barbearia/db test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/migracao-aditiva.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/db/test/migracoes-repetiveis.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/assinatura.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/cobranca-do-clube.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/cobranca-online.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/comanda-visivel.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/comissao-da-assinatura.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/comissao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/compartilhado.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/crescimento.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/desempenho.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/escopo-de-unidade.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/estoque.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/estorno.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/fidelidade.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/finance.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/financeiro.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/fiscal.indice.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/fiscal.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/metrica.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/multiunidade.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/contrato.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/dps.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/infraestrutura.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/nacional.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/nfse/transporte.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/pacote.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/painel.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/rede.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/sinal.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/finance/src/split.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/finance test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/apikey.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/audit.guard.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/audit.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/messaging.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/mfa-staff.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/mfa.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/origem.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/otp.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/password.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/staff.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/team.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/identity/src/webhook.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/identity test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/jobs/src/fiscal.test.ts",
+      "runner": "pnpm --filter @barbearia/jobs test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/jobs/src/jobs.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/jobs test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/jobs/src/metricas.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/jobs test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/jobs/src/variaveis-do-aviso.test.ts",
+      "runner": "pnpm --filter @barbearia/jobs test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/onboarding/src/onboarding.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/onboarding test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/adquirente.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/assinatura.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/atribuicao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/aviso-operacional.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/cobranca-reserva.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/cobranca.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/destaque.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/franquia.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/horario.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/metricas.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/plataforma.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/psp.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/serie.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/stripe-autenticacao.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/stripe-cadastro.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/stripe-pagamento.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/stripe.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/platform/src/vitrine.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/platform test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/agenda.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/barbeiro.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/booking.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/confianca.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/contencao.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/counter.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/dayboard.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/espera.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/fila.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/insight.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/oferta-token.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/oferta.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/scheduling/src/service.integration.test.ts",
+      "runner": "pnpm --filter @barbearia/scheduling test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/ui/src/components/components.test.tsx",
+      "runner": "pnpm --filter @barbearia/ui test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/ui/src/tokens/contrast.test.ts",
+      "runner": "pnpm --filter @barbearia/ui test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/ui/src/tokens/css.test.ts",
+      "runner": "pnpm --filter @barbearia/ui test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "packages/ui/src/tokens/tokens.test.ts",
+      "runner": "pnpm --filter @barbearia/ui test",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/afetados.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/backup-crypto.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/backup-shell.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/cadeira-com-tipo.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/carga-concorrencia-reserva.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/crase-em-script-inline.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/crase-em-sql.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/cron-do-backup.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/deploy-sha.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/env-example.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/escopo-com-rota.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/estado-de-agendamento-do-dominio.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/esteira-deploy.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/evento-de-webhook-com-emissor.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/id-com-unidade.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/instalador-deploy.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/metrica-com-resposta.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/param-com-pipe.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/permissao-com-rota.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/prontidao-deploy.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/r12-usabilidade.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/recursos-da-navegacao.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/recusa-com-frase.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/restauracao-segura.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/rotas-reservadas.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/segredos-do-deploy.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/semente-nao-inventa.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/semente-permitida.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/summary-com-classe.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/uniao-do-dominio.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/update-de-unidade-com-where.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/varredura-com-chamador.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-404-por-superficie.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-a11y-ux.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-alvo-e-comissao.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-auditoria-catalogo-onboarding.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-auditoria-crm-whatsapp.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-auditoria-final-cross-domain.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-auditoria-financeiro.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-auditoria-platform-jobs.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-auditoria-scheduling.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-bot-protection.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-certificacao-pratica.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-configuracao-producao.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-criptografia-backup.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-hardening-integracoes.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-hora-com-fuso.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-identidade-seguranca.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-movimento-reduzido.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-observabilidade.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-otp-entregavel.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-percurso-venda-e2e.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-portao-seguranca.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-prontidao.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-r10-css.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-r11-modulos.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-r6-promessas.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-r8-comercial.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-recheck-final.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-rede-de-deploy.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-robustez-operacional.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-segredos.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-sql-seguro.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-v8-estatico-global.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    },
+    {
+      "arquivo": "scripts/verificar-vazio-de-texto.test.mjs",
+      "runner": "scripts/verify.sh",
+      "incluido_no_portao": true
+    }
+  ],
+  "sem_runner": [],
+  "observacao": "Inclusão estrutural; resultados de execução ficam nas evidências de cada comando.",
+  "ensaios_adicionais": [
+    "scripts/medicao.sh",
+    "scripts/ensaio-de-rollback.sh",
+    "scripts/ensaio-de-restauracao.sh",
+    "python3 output/prova_backup_cifrado.py",
+    "TZ=Asia/Tokyo pnpm --filter @barbearia/core test",
+    "node scripts/verificar-segredos.mjs --history",
+    "pnpm audit",
+    "python3 output/prova_instalacao_limpa.py",
+    "python3 output/prova_baileys_navegador.py",
+    "python3 output/prova_baileys_worker_navegador.py",
+    "python3 output/prova_stripe_navegador.py",
+    "python3 output/prova_fiscal_navegador.py",
+    "python3 output/prova_proxy_corrigido.py",
+    "python3 output/prova_log_fiscal_proxy.py",
+    "python3 output/prova_conferidores_demo.py",
+    "python3 output/prova_pilha_complementar.py",
+    "python3 output/prova_pilha_complementar.py --consistency"
+  ]
+}

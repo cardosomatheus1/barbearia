@@ -569,7 +569,7 @@ export interface ConfiguracaoDoSplitNaTela {
 }
 
 export const splitDoPeriodoNaApi = (token: string, de: string, ate: string) =>
-  chamar<{ configuracao: ConfiguracaoDoSplitNaTela; repasses: RepasseNaTela[]; hasMore: boolean }>(
+  chamar<{ disponivel: boolean; configuracao: ConfiguracaoDoSplitNaTela; repasses: RepasseNaTela[]; hasMore: boolean }>(
     'GET',
     `/v1/admin/split?de=${de}&ate=${ate}`,
     undefined,

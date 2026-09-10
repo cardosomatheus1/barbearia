@@ -7,10 +7,11 @@ import { spawnSync } from 'node:child_process';
 
 const raiz = process.cwd();
 const arquivos = [
-  'packages/crm/src/disparo-promocional.ts',
+  'packages/jobs/src/disparo-promocional.ts',
   'packages/crm/src/mensagem-avulsa.ts',
   'packages/crm/src/campanha.ts',
   'packages/crm/src/automacao.ts',
+  'packages/crm/src/automacao-despacho.ts',
   'packages/crm/src/whatsapp-mensagens.ts',
   'packages/crm/src/whatsapp-templates.ts',
   'packages/crm/src/whatsapp-meta.ts',
@@ -35,6 +36,8 @@ function mutacao(rel, de, para) {
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(path.join(raiz, arq), dst);
   }
+  const baseline=spawnSync(process.execPath,['scripts/verificar-auditoria-crm-whatsapp.mjs'],{cwd:tmp,encoding:'utf8'});
+  assert.equal(baseline.status,0,baseline.stdout+'\n'+baseline.stderr);
   const alvo = path.join(tmp, rel);
   const antes = fs.readFileSync(alvo, 'utf8');
   assert.ok(antes.includes(de), `fixture não contém mutação: ${de.slice(0, 90)}`);
@@ -46,15 +49,14 @@ function mutacao(rel, de, para) {
 }
 
 test('detecta remoção do advisory lock da cota promocional', () =>
-  mutacao('packages/crm/src/disparo-promocional.ts', 'pg_advisory_xact_lock', 'lock_removido'));
+  mutacao('packages/jobs/src/disparo-promocional.ts', 'pg_advisory_xact_lock', 'lock_removido'));
 test('detecta remoção do ledger de intenção promocional', () =>
-  mutacao('packages/crm/src/disparo-promocional.ts', 'notification_send_intents', 'ledger_removido'));
+  mutacao('packages/jobs/src/disparo-promocional.ts', 'notification_send_intents', 'ledger_removido'));
 test('detecta retorno a conflito não qualificado por tenant', () =>
-  mutacao('packages/crm/src/disparo-promocional.ts',
+  mutacao('packages/jobs/src/disparo-promocional.ts',
     'ON CONFLICT (tenant_id, intent_key) DO NOTHING', 'ON CONFLICT DO NOTHING'));
-test('detecta leitura da intenção sem tenant explícito', () =>
-  mutacao('packages/crm/src/disparo-promocional.ts',
-    'WHERE tenant_id = ${params.tenantId}::uuid', 'WHERE 1 = 1'));
+test('detecta domínio de automação sem isolamento por tenant', () =>
+  mutacao('packages/crm/src/automacao.ts', 'withTenant(', 'semTenant('));
 test('detecta regressão do dia local para UTC no avulso', () =>
   mutacao('packages/crm/src/mensagem-avulsa.ts', 'AT TIME ZONE ${params.timeZone}', "AT TIME ZONE 'UTC'"));
 test('detecta avulso que aceita sucesso sem wamid', () =>
@@ -62,7 +64,7 @@ test('detecta avulso que aceita sucesso sem wamid', () =>
 test('detecta campanha que perde a reserva compartilhada', () =>
   mutacao('packages/crm/src/campanha.ts', 'reservarDisparoPromocional(tx, {', 'RESERVA_REMOVIDA(tx, {'));
 test('detecta worker que envia automação sem reserva', () =>
-  mutacao('apps/worker/src/main.ts', 'reservarDisparoDaAutomacao({', 'RESERVA_AUTOMACAO_REMOVIDA({'));
+  mutacao('packages/crm/src/automacao-despacho.ts', 'reservarDisparoDaAutomacao({', 'RESERVA_AUTOMACAO_REMOVIDA({'));
 test('detecta perda do desfecho ambíguo após sucesso Meta', () =>
   mutacao('packages/crm/src/whatsapp-mensagens.ts', "throw new WhatsAppDeliveryUnknownError(\n      'a Meta confirmou", "throw new Error(\n      'a Meta confirmou"));
 test('detecta conciliação de templates sem locationId', () =>

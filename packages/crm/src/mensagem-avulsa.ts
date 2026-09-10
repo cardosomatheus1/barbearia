@@ -126,6 +126,7 @@ export async function enviarMensagemAvulsa(params: {
    */
   readonly idempotencyKey: string;
   readonly enviar: (destino: {
+    readonly intentKey: string;
     readonly telefone: string;
     readonly clienteNome: string;
     readonly barbearia: string;
@@ -159,15 +160,15 @@ export async function enviarMensagemAvulsa(params: {
   if (params.templateId) {
     const doTexto = await withTenant(params.tenantId, async (tx) => {
       const linhas = await tx.$queryRaw<{ kind: TipoDeNotificacao }[]>`
-        SELECT kind::text AS kind FROM whatsapp_templates
+        SELECT kind::text AS kind FROM whatsapp_templates_disponiveis
          WHERE id = ${params.templateId}::uuid
            AND location_id = ${params.locationId}::uuid
-           AND status = 'aprovado'
+
       `;
       return linhas[0] ?? null;
     });
     if (!doTexto) {
-      throw new EnvioAvulsoError('sem_texto_aprovado', 'Este texto não existe ou não foi aprovado.');
+      throw new EnvioAvulsoError('sem_texto_aprovado', 'Este texto não está disponível na conexão selecionada.');
     }
     if (!tipoDeCampanhaValido(doTexto.kind)) {
       throw new EnvioAvulsoError(
@@ -206,10 +207,9 @@ export async function enviarMensagemAvulsa(params: {
                WHERE n.customer_id = c.id AND n.status = 'sent'
                  AND n.kind = ANY(${[...TIPOS_PROMOCIONAIS]}::notification_kind[])
                  AND n.sent_at > ${params.agora}::timestamptz - interval '30 days') AS no_mes,
-             EXISTS (SELECT 1 FROM whatsapp_templates t
+             EXISTS (SELECT 1 FROM whatsapp_templates_disponiveis t
                       WHERE t.location_id = ${params.locationId}::uuid
-                        AND t.kind = ${tipo}::notification_kind
-                        AND t.status = 'aprovado') AS aprovado
+                        AND t.kind = ${tipo}::notification_kind) AS aprovado
         FROM customers c
        WHERE c.id = ${params.customerId}::uuid AND c.anonymized_at IS NULL
     `;
@@ -222,7 +222,7 @@ export async function enviarMensagemAvulsa(params: {
   if (!dados.aprovado) {
     throw new EnvioAvulsoError(
       'sem_texto_aprovado',
-      'Não há texto aprovado para este aviso. Mande um para aprovação antes.',
+      'Não há mensagem disponível para este aviso. Confira os textos na conexão do WhatsApp.',
     );
   }
 
@@ -365,7 +365,7 @@ export async function enviarMensagemAvulsa(params: {
     throw new EnvioAvulsoError(
       intencao.linha.status === 'incerto' ? 'envio_incerto' : 'envio_em_andamento',
       intencao.linha.status === 'incerto'
-        ? 'A Meta pode ter recebido esta mensagem, mas o Barberdock não conseguiu confirmar. Não envie novamente agora.'
+        ? 'O WhatsApp pode ter recebido esta mensagem, mas o Barberdock não conseguiu confirmar. Não envie novamente agora.'
         : 'Este mesmo texto já está sendo enviado para o cliente. Aguarde antes de tentar de novo.',
     );
   }
@@ -407,6 +407,7 @@ export async function enviarMensagemAvulsa(params: {
   let wamid: string | null;
   try {
     wamid = await params.enviar({
+      intentKey: promoIntentKey,
       telefone,
       clienteNome: dados.nome ?? 'cliente',
       barbearia: dados.barbearia,
@@ -431,7 +432,7 @@ export async function enviarMensagemAvulsa(params: {
       });
       throw new EnvioAvulsoError(
         'envio_incerto',
-        'A Meta pode ter recebido esta mensagem, mas o Barberdock não conseguiu confirmar. Não envie novamente agora.',
+        'O WhatsApp pode ter recebido esta mensagem, mas o Barberdock não conseguiu confirmar. Não envie novamente agora.',
       );
     }
 
@@ -453,13 +454,6 @@ export async function enviarMensagemAvulsa(params: {
    * conservadoramente ambíguo em vez de duplicar a mensagem.
    */
   await withTenant(params.tenantId, async (tx) => {
-    const atualizadas = await tx.$executeRaw`
-      UPDATE whatsapp_manual_send_intents
-         SET status = 'enviado', wamid = ${wamid}, updated_at = ${params.agora}
-       WHERE id = ${intencao.linha.id}::uuid AND status = 'enviando'
-    `;
-    if (atualizadas !== 1) throw new Error('intenção avulsa deixou de pertencer a este envio');
-
     const confirmou = await confirmarDisparoPromocional(tx, {
       intentKey: promoIntentKey,
       tipo,
@@ -469,6 +463,15 @@ export async function enviarMensagemAvulsa(params: {
       enviadoEm: params.agora,
     });
     if (!confirmou) throw new Error('reserva promocional não pôde ser confirmada');
+
+    const atualizadas = await tx.$executeRaw`
+      UPDATE whatsapp_manual_send_intents
+         SET status = 'enviado', wamid = ${wamid}, updated_at = ${params.agora}
+       WHERE id = ${intencao.linha.id}::uuid AND (status IN ('enviando','incerto') OR (status = 'enviado' AND wamid = ${wamid}))
+    `;
+    if (atualizadas !== 1) throw new Error('intenção avulsa deixou de pertencer a este envio');
+
+
 
     await audit(tx, {
       actorId: params.staffId,

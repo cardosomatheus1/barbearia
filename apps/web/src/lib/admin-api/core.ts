@@ -19,6 +19,7 @@ export async function chamar<T>(
   body?: unknown,
   token?: string,
   idempotencyKey?: string,
+  timeoutMs?: number,
 ): Promise<Resposta<T>> {
   let resposta: Response;
   try {
@@ -31,7 +32,7 @@ export async function chamar<T>(
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       cache: 'no-store',
-    });
+    }, timeoutMs);
   } catch (erro) {
     if (erro instanceof ApiTimeoutError) {
       return { ok: false, code: 'api_timeout', message: 'A API demorou mais do que o esperado. Tente novamente.' };

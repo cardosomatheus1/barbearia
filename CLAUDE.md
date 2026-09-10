@@ -635,6 +635,10 @@ export ADMIN_DATABASE_URL="postgres://postgres@127.0.0.1:5432/postgres"
 
 | Assunto | Convenção |
 |---|---|
+| Cobrança Stripe | exclusiva da assinatura SaaS. Reserva persistida antes da rede, snapshot do cartão/valor e mesma identidade em retry; após 23h só conciliação, porque reutilizar uma chave expirada pode duplicar o débito |
+| WhatsApp por unidade | Meta usa templates aprovados; Baileys usa textos locais habilitados. Ambos compartilham consentimento, cota e intenção durável; sucesso Baileys exige ACK do servidor, porque o retorno local do socket não comprova envio |
+| Fiscal próprio | NFS-e nacional com cobertura explicitamente limitada por regime e município. Certificado/XML cifrados sob RLS; testes sintéticos não autorizam afirmar homologação ou cobertura universal |
+| Convite da lista de espera | token autenticado por hash e cifra temporária para retomar entrega; apagar ao encerrar. Sem recuperação, uma falha depois de reservar a vaga perderia o link e impediria o retry |
 | Dinheiro | centavos inteiros (`price_cents`), nunca float |
 | Data/hora no banco | `timestamptz`, sempre UTC |
 | Data/hora no domínio | minutos locais desde a meia-noite; conversão só em `zone.ts` |

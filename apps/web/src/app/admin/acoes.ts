@@ -103,6 +103,8 @@ export {
   acaoReverterImportacao,
   acaoAdicionarSlug,
   acaoTrocarDePlano,
+  acaoCadastrarCartaoSaas,
+  acaoConciliarCartaoSaas,
   acaoPermissoesDoPapel,
   acaoConsentimentoNoBalcao,
   acaoAbrirPedidoDeDados,
@@ -179,3 +181,7 @@ export {
   acaoCadastrarWebhook,
   acaoDesligarWebhook,
 } from './acoes/crescimento-plataforma';
+
+export { acaoSalvarNfse, acaoSalvarCertificadoNfse, acaoRemoverCertificadoNfse } from './acoes/fiscal-nacional';
+export { acaoSelecionarConexao, acaoOperarBaileys, acaoSalvarTextoBaileys } from './acoes/whatsapp-conexao';
+export { acaoAutenticarCobranca } from './acoes/stripe-autenticacao';

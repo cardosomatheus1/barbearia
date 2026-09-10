@@ -10,6 +10,7 @@ export * from './psp.js';
 export * from './conciliacao.js';
 export * from './aviso-operacional.js';
 export * from './stripe.js';
+export * from './stripe-cadastro.js';
 export * from './stripe-pagamento.js';
 export * from './adquirente.js';
 export * from './serie.js';
@@ -17,3 +18,5 @@ export * from './vitrine.js';
 export * from './atribuicao.js';
 export * from './destaque.js';
 export * from './franquia.js';
+
+export * from './stripe-autenticacao.js';

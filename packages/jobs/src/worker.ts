@@ -415,6 +415,7 @@ export interface Contexto {
     assinaturaId: string,
     motivo: string,
     agora: Date,
+    intentKey: string,
   ) => Promise<boolean>;
   /**
    * O alerta operacional saindo pelo canal do gestor (bloco 33), injetado.
@@ -501,7 +502,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
     if (!invoiceId) throw new Error('tarefa fiscal sem nota');
 
     const estado = await contexto.processarNota(tarefa.tenantId, invoiceId);
-    if (!notaEmCurso(estado)) return;
+    if (!notaEmCurso(estado) && estado !== 'cancelando') return;
 
     /**
      * Ainda na prefeitura: pergunta de novo daqui a pouco.
@@ -517,7 +518,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
         kind: 'fiscal.emitir',
         payload: { invoiceId },
         rodarApos: proxima,
-        idempotencyKey: `fiscal:${invoiceId}:${tarefa.attempts + 1}`,
+        idempotencyKey: `fiscal:${invoiceId}:consulta:${proxima.toISOString()}`,
       });
     });
   },
@@ -915,6 +916,7 @@ export const HANDLERS: Readonly<Record<string, Handler>> = {
       subscriptionId,
       motivo,
       contexto.relogio.agora(),
+      `clube:aviso:${tarefa.id}`,
     );
   },
 

@@ -443,17 +443,16 @@ export function MandarMensagem({
         <p className="secao__vazio">
           {faltaDeTexto(textos.length, textosDeCampanha.length) === 'nada_aprovado' ? (
             <>
-              Nenhum texto aprovado ainda. A Meta precisa aprovar cada texto antes de ele
-              poder sair — <a href="/admin/whatsapp">mande um para aprovação</a>.
+              Nenhuma mensagem disponível nesta conexão. <a href="/admin/whatsapp">Confira os textos do WhatsApp</a>.
             </>
           ) : (
             <>
               {textos.length === 1
-                ? 'Você tem um texto aprovado, mas ele não'
-                : `Você tem ${textos.length} textos aprovados, mas nenhum deles`}{' '}
+                ? 'Você tem uma mensagem disponível, mas ela não'
+                : `Você tem ${textos.length} mensagens disponíveis, mas nenhuma delas`}{' '}
               serve para mandar à mão: aqui só saem {tiposDeCampanhaPorExtenso('e')}. Os
               outros saem sozinhos, na hora deles.{' '}
-              <a href="/admin/whatsapp">Mande um destes para aprovação</a>.
+              <a href="/admin/whatsapp">Configure uma mensagem para esta finalidade</a>.
             </>
           )}
         </p>

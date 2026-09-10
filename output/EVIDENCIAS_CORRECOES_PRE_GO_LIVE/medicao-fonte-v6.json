@@ -1,0 +1,14 @@
+{
+  "name": "medicao-fonte-v6",
+  "command": [
+    "env",
+    "MEDICAO_MANTER_BANCO=1",
+    "MEDICAO_DB_NAME=barbearia_audit_medicao_v6",
+    "MEDICAO_PRINTS=/home/ec2-user/codex-tmp/barbearia-pre-go-live-20260909/output/PRINTS_CORRECOES_PRE_GO_LIVE",
+    "bash",
+    "scripts/medicao.sh"
+  ],
+  "started_utc": "2026-09-10T08:41:33.124016+00:00",
+  "duration_seconds": 659.29,
+  "exit_code": 0
+}

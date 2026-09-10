@@ -1,0 +1,1332 @@
+{
+  "comando": [
+    "python3",
+    "output/executar_verify_correcao.py",
+    "fiscal-baileys-stripe-v6"
+  ],
+  "inicio_utc": "2026-09-10T07:53:14.441989+00:00",
+  "duracao_segundos": 2866.69,
+  "exit_code": 0,
+  "fonte_estavel": true,
+  "fonte_sha256": "23a0bbb74c8a422592ea40519106e904270d69adf90522ffd904456b67631255",
+  "guardas_iniciais": [
+    {
+      "nome": "matriz de prontidão",
+      "resultado": "ok"
+    },
+    {
+      "nome": "verdade comercial R8",
+      "resultado": "ok"
+    },
+    {
+      "nome": "vocabulário e navegação V0",
+      "resultado": "ok"
+    },
+    {
+      "nome": "invariantes da auditoria",
+      "resultado": "ok"
+    },
+    {
+      "nome": "auditoria profunda de invariantes",
+      "resultado": "ok"
+    },
+    {
+      "nome": "auditoria ofensiva de invariantes",
+      "resultado": "ok"
+    },
+    {
+      "nome": "rotas internas web",
+      "resultado": "ok"
+    },
+    {
+      "nome": "porta de clientes V1",
+      "resultado": "ok"
+    },
+    {
+      "nome": "orientação V3",
+      "resultado": "ok"
+    },
+    {
+      "nome": "operação x configuração V4",
+      "resultado": "ok"
+    },
+    {
+      "nome": "centro operacional V5",
+      "resultado": "ok"
+    },
+    {
+      "nome": "primeira ilha de cliente R5",
+      "resultado": "ok"
+    },
+    {
+      "nome": "promessas históricas R6",
+      "resultado": "ok"
+    },
+    {
+      "nome": "lacunas declaradas",
+      "resultado": "ok"
+    },
+    {
+      "nome": "agenda proporcional V10",
+      "resultado": "ok"
+    },
+    {
+      "nome": "busca global e ações V11",
+      "resultado": "ok"
+    },
+    {
+      "nome": "V8 técnico global estático",
+      "resultado": "ok"
+    },
+    {
+      "nome": "acessibilidade e densidade operacional",
+      "resultado": "ok"
+    },
+    {
+      "nome": "honestidade do percurso financeiro E2E",
+      "resultado": "ok"
+    },
+    {
+      "nome": "percursos de usabilidade R12",
+      "resultado": "ok"
+    },
+    {
+      "nome": "armazenamento próprio de mídia R9",
+      "resultado": "ok"
+    },
+    {
+      "nome": "CSS por superfície R10",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos do admin R11",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos financeiros da comanda",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos do motor de booking",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos do CRM/WhatsApp",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos financeiros de comissão",
+      "resultado": "ok"
+    },
+    {
+      "nome": "módulos financeiros fiscais",
+      "resultado": "ok"
+    },
+    {
+      "nome": "build dos pacotes",
+      "resultado": "ok"
+    }
+  ],
+  "etapas": [
+    {
+      "indice": 0,
+      "nome": "typecheck",
+      "resultado": "ok",
+      "log_sha256": "b1366141da184397c4a94ef042b40b0c1d9a4a081e7a957e59c7ad73bfb82dba",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 1,
+      "nome": "build do web + typecheck",
+      "resultado": "ok",
+      "log_sha256": "effef7252b9c7ef7e56ec7309aa5ee309eab0d2703fde83e2a30f843d343e00f",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 2,
+      "nome": "build da api",
+      "resultado": "ok",
+      "log_sha256": "f23c40051b9b402efe9e74def7e6dd5a095cc7787cfd85d5ecca9e55a0e949ab",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 3,
+      "nome": "core — unitários",
+      "resultado": "ok",
+      "log_sha256": "02a401e06c29a94af8d6f9045f462c9707ca923332cb40fc833b15bb96ea7af4",
+      "vitest": [
+        {
+          "passed": 1435
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 4,
+      "nome": "ui — tokens e componentes",
+      "resultado": "ok",
+      "log_sha256": "3d207424d1e234fe8e786219aeffa8c5d84d626d41fa40e0a944c2c2bcfcbd23",
+      "vitest": [
+        {
+          "passed": 90
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 5,
+      "nome": "web — lógica de tela",
+      "resultado": "ok",
+      "log_sha256": "3881288f7d8e8b8188ab3d951cb555d01546120a2ab84c22f9421a2006e9f3d5",
+      "vitest": [
+        {
+          "passed": 191
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 6,
+      "nome": "resolvedor de afetados",
+      "resultado": "ok",
+      "log_sha256": "1fae571c04822052be3a5da26bdb0e174a32dbf18776d38f503a752b73662565",
+      "vitest": [
+        {
+          "passed": 9
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 7,
+      "nome": "guarda da matriz de prontidão",
+      "resultado": "ok",
+      "log_sha256": "b34c5071bce93a880e906d0faef70190fe571ed2951eb812efebcc1a82df12d6",
+      "vitest": [],
+      "tap": {
+        "tests": 11,
+        "pass": 11,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 8,
+      "nome": "guarda CSS R10 — negativos",
+      "resultado": "ok",
+      "log_sha256": "065fac33a54a2ea7a88b3148dd4e1780797bbc6a9e4e43c2416d9e5168904ac7",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 9,
+      "nome": "guarda R11 — módulos por domínio",
+      "resultado": "ok",
+      "log_sha256": "0b6d54300e702fd45eedc5dc22e85a0c8b9fc0bb7b5962d7488dfd57e01fe46a",
+      "vitest": [
+        {
+          "passed": 4
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 10,
+      "nome": "crase em consulta SQL",
+      "resultado": "ok",
+      "log_sha256": "58615df47c3884bed9e9019b982f0ce9a42b53b2a2fe9c0738a8ca14e64f117c",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 11,
+      "nome": "crase em script inline",
+      "resultado": "ok",
+      "log_sha256": "967f9fe1cef4f19813584af6669437875b6889b036dca56984a6a6de1c210314",
+      "vitest": [
+        {
+          "passed": 1
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 12,
+      "nome": "o .env.example é a lista",
+      "resultado": "ok",
+      "log_sha256": "c795fc6cf5d9b98def0998c9df1c1e6a21c50d7bc30584deb129e3a23473045d",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 13,
+      "nome": "recurso do menu × catálogo",
+      "resultado": "ok",
+      "log_sha256": "cf195d998445ddfdc4d55d00af74ef0bf31e6c41604b6723b6048746f264e64c",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 14,
+      "nome": "UPDATE de unidade com WHERE",
+      "resultado": "ok",
+      "log_sha256": "c2146b8daff157b37c5ad33d1a4ec89b16f25c0dcd33c18e483583caf6a2401a",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 15,
+      "nome": "evento de webhook com emissor",
+      "resultado": "ok",
+      "log_sha256": "3391dd4bf795d7d24d054b722fb7deaea7dc30b45948f66070484729c894a436",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 16,
+      "nome": "escopo de chave × rota",
+      "resultado": "ok",
+      "log_sha256": "55bbfaca0bef1e101151db7ac0eae9e69820321fce5a3129bba6191bd3846c58",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 17,
+      "nome": "@Param com pipe",
+      "resultado": "ok",
+      "log_sha256": "4eddf98c0f601078efd3ccecc47f23e6907fbd33718dd058ff65716fc9706598",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 18,
+      "nome": "métrica com resposta",
+      "resultado": "ok",
+      "log_sha256": "0c749e04308d460a8b7dc237bf5d98330910569c91c69d19e07489822d50842f",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 19,
+      "nome": "capacidade com tipo de cadeira",
+      "resultado": "ok",
+      "log_sha256": "d16954fb4bd0f7b984d3edc4dc488bb4421c0492e749acc2ffc8bcb2d3df6478",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 20,
+      "nome": "id conferido contra a unidade",
+      "resultado": "ok",
+      "log_sha256": "79155387354ab7e5f4ecffd5c23f627514a9d93d755507b676ac1c4886e390d1",
+      "vitest": [
+        {
+          "passed": 4
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 21,
+      "nome": "permissao com rota",
+      "resultado": "ok",
+      "log_sha256": "e6d050a496315e028d2a2f8128e20b2e39c0bee2363100aebb1799a8abc6e265",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 22,
+      "nome": "recusa com frase",
+      "resultado": "ok",
+      "log_sha256": "23e51612ecbdb8b8aed262aa67dca1e860643c4cbaf8085e412e51e2a214037d",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 23,
+      "nome": "uniao do dominio",
+      "resultado": "ok",
+      "log_sha256": "a10287092f296d884667e8812c7cab1250426636a1bf44ef1bd9b735fdfb7e6a",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 24,
+      "nome": "summary com classe",
+      "resultado": "ok",
+      "log_sha256": "200575c96a3a839337e8df85dec19849be26baa4741efafec0cd4950b45e6e9b",
+      "vitest": [
+        {
+          "passed": 2
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 25,
+      "nome": "rota de primeiro nível × slug reservado",
+      "resultado": "ok",
+      "log_sha256": "3a199ced15c2250831d55308a5493716e3dab1c4e014eb7d4894a64b1d6e2ca5",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 26,
+      "nome": "segredos do deploy",
+      "resultado": "ok",
+      "log_sha256": "7fdf48aa2bcf20483cbc761382ae07a3036ce16ad66a7062ab5efaafd7bba294",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 27,
+      "nome": "configuração de produção",
+      "resultado": "ok",
+      "log_sha256": "ab39baf70880eb618f881c30fb2c3174a5b1bd78d30caeaf6ed69a87685b1e65",
+      "vitest": [],
+      "tap": {
+        "tests": 25,
+        "pass": 25,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 28,
+      "nome": "SQL seguro",
+      "resultado": "ok",
+      "log_sha256": "a2934e639207072de52997eaf9a180fdb464f720e88ae864619b35555b53b76e",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 29,
+      "nome": "SQL seguro — negativos",
+      "resultado": "ok",
+      "log_sha256": "90fa80ddb8cef1be6fa5f7ba3572fd81cd23daac1bd9c1955cf2436af7ef0639",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 30,
+      "nome": "segredos no snapshot",
+      "resultado": "ok",
+      "log_sha256": "d72f192a4cb44d5be2ba3b2f2df5cb7992358e8d44a004ac7058d4bfb0d8ce89",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 31,
+      "nome": "secret scan — negativos",
+      "resultado": "ok",
+      "log_sha256": "b18299aa4b683493b278b69f0b09c2a796c4ff680a702a4843cc7fdbc7220043",
+      "vitest": [],
+      "tap": {
+        "tests": 10,
+        "pass": 10,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 32,
+      "nome": "proteção anti-bot",
+      "resultado": "ok",
+      "log_sha256": "c322ca40e405eb4539b1b3a191373fd2dc8b338385c6a6641913e1ddd2aca916",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 33,
+      "nome": "proteção anti-bot — negativos",
+      "resultado": "ok",
+      "log_sha256": "f2753b290e969d0d5be90eba5c89887a13363198cdedfee01ee330cb0aa3fcff",
+      "vitest": [],
+      "tap": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 34,
+      "nome": "portão de segurança",
+      "resultado": "ok",
+      "log_sha256": "d8dcdfaa99536a0c996cc38b1c4f8cd298d256b8f268868f55f7eee5f14cd31e",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 35,
+      "nome": "portão de segurança — negativos",
+      "resultado": "ok",
+      "log_sha256": "53ed9979ece90c6b5b8379c70e80e20cb1ce081aaddfbaf5e463227453125d4b",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 36,
+      "nome": "identidade/tenant — segurança",
+      "resultado": "ok",
+      "log_sha256": "c224eccafb286e5c60138ef910978e3b6eb0f9d4db6ae318453b0887fbe89cd9",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 37,
+      "nome": "identidade/tenant — negativos",
+      "resultado": "ok",
+      "log_sha256": "014ed7d7c97844f941d9150c4a16828c666d5c91cb1a4b12d3a258d62938f61a",
+      "vitest": [],
+      "tap": {
+        "tests": 14,
+        "pass": 14,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 38,
+      "nome": "auditoria Scheduling",
+      "resultado": "ok",
+      "log_sha256": "d33b0c59462acccee0d345a439b8a1e6da34eaad0e384c8915d0b3ac5df55a2f",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 39,
+      "nome": "auditoria Scheduling — negativos",
+      "resultado": "ok",
+      "log_sha256": "971e486fe7c4db9e448bd41fbb3362f886301f19874f9f43c45234cf11e56396",
+      "vitest": [],
+      "tap": {
+        "tests": 11,
+        "pass": 11,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 40,
+      "nome": "auditoria Financeiro",
+      "resultado": "ok",
+      "log_sha256": "0b4c9facbfa7d71b5737829281f7f5e5ca9ad3743098c3f94e348c153488b2f6",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 41,
+      "nome": "auditoria Financeiro — negativos",
+      "resultado": "ok",
+      "log_sha256": "e36ae29b4f851d6df59fd125579bb9c0c94943f54b6200bad6267fc2eba4931d",
+      "vitest": [],
+      "tap": {
+        "tests": 17,
+        "pass": 17,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 42,
+      "nome": "auditoria CRM/WhatsApp",
+      "resultado": "ok",
+      "log_sha256": "f6e0baf384383bc16e914e71c6ccb6f0f4214c9347ef974a41bf25febe701f28",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 43,
+      "nome": "auditoria CRM/WhatsApp — negativos",
+      "resultado": "ok",
+      "log_sha256": "2f5650946010010b2f79a884375c901278ccd726e56f8665f26336b277117dec",
+      "vitest": [],
+      "tap": {
+        "tests": 21,
+        "pass": 21,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 44,
+      "nome": "auditoria Catálogo/Onboarding",
+      "resultado": "ok",
+      "log_sha256": "ed5893a4b95b0a4629f7677e7499760c43f8b5564939d8517514b64cd23f9915",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 45,
+      "nome": "auditoria Catálogo/Onboarding — negativos",
+      "resultado": "ok",
+      "log_sha256": "c8ad0c445468950e5479885df7d68dafbf0e0c500b7ec65c9c575deddf9b666e",
+      "vitest": [],
+      "tap": {
+        "tests": 28,
+        "pass": 28,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 46,
+      "nome": "auditoria Platform/Jobs",
+      "resultado": "ok",
+      "log_sha256": "434e202bafa9627f404d3a44a4b1284e0afd8f53028bb17288c91029a570291e",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 47,
+      "nome": "auditoria Platform/Jobs — negativos",
+      "resultado": "ok",
+      "log_sha256": "71fc649a04035b7dbb2bb2059017a336e6e04ae1059020a68235d8b661b266c7",
+      "vitest": [],
+      "tap": {
+        "tests": 19,
+        "pass": 19,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 48,
+      "nome": "auditoria Final Cross-Domain",
+      "resultado": "ok",
+      "log_sha256": "8ff5a5d2fbfaa5e9efc2651395b8fea7a48e2a0c9577c081f3fb682ce94df92d",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 49,
+      "nome": "auditoria Final Cross-Domain — negativos",
+      "resultado": "ok",
+      "log_sha256": "4d508ff7395d50406e8680a608cb3c7478297a57091b026d217676f9ea6bc80f",
+      "vitest": [],
+      "tap": {
+        "tests": 23,
+        "pass": 23,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 50,
+      "nome": "auditoria Recheck Final",
+      "resultado": "ok",
+      "log_sha256": "5778e97ff26e82553dad30c32038fe695ca3ff1c7b2a685a6b484a213d73c978",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 51,
+      "nome": "auditoria Recheck Final — negativos",
+      "resultado": "ok",
+      "log_sha256": "ccb68427f2b6fc3fe6d67763f6b48a049f5320de6a1f26ee5c166e77c2869a69",
+      "vitest": [],
+      "tap": {
+        "tests": 16,
+        "pass": 16,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 52,
+      "nome": "certificação prática da pilha",
+      "resultado": "ok",
+      "log_sha256": "195c25612028ec604fb7b3f45306263b6959a01f2a398578ba52cc4b2cc55acc",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 53,
+      "nome": "certificação prática da pilha — negativos",
+      "resultado": "ok",
+      "log_sha256": "d4b635ba69138e0764d8e1eef21845609788be9a3cea56ea93dec5f39e4d87f6",
+      "vitest": [],
+      "tap": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 54,
+      "nome": "carga concorrente — contrato do ensaio",
+      "resultado": "ok",
+      "log_sha256": "ba070d2f23ab350e44f7c36176f032c40fab5a126cdff683fe2ab02a206e7362",
+      "vitest": [],
+      "tap": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 55,
+      "nome": "404 por superfície",
+      "resultado": "ok",
+      "log_sha256": "d83ac815a5a3bc285957eae14eedafd872ac7da6360239f490ac78f0138bfa6c",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 56,
+      "nome": "estado de agendamento no domínio",
+      "resultado": "ok",
+      "log_sha256": "5c1853b46fed30ca77c06b801918ddfb99263154a66d5ebae90aaa359f2324da",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 57,
+      "nome": "estado de agendamento — negativos",
+      "resultado": "ok",
+      "log_sha256": "815963dd64100a6b72e5d06084ade4e3cb7a534001a2d8627f72e7617ebb1f58",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 58,
+      "nome": "varredura com chamador",
+      "resultado": "ok",
+      "log_sha256": "cf3d52a46235b5f00be189995900772cf0e4b747f858d8c97015e83990e13602",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 59,
+      "nome": "R12 usabilidade — negativos",
+      "resultado": "ok",
+      "log_sha256": "eaf3e40155d5612a16c0fc3a594f841d7c0e6c8ba7f3968b8708a3e39a16e84d",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 60,
+      "nome": "R6 promessas — negativos",
+      "resultado": "ok",
+      "log_sha256": "5631b036b9edea80e036bc4d508ab699a2e02c1a88ea431f17cc53983ab4a5eb",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 61,
+      "nome": "R8 comercial — negativos",
+      "resultado": "ok",
+      "log_sha256": "21a179c3ea134e216fcc29902574a82f2ef2d42c21a88e6bef2426d91454d45a",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 62,
+      "nome": "movimento reduzido",
+      "resultado": "ok",
+      "log_sha256": "5069a6ac05381c64bf44e413a01b3293f43ca8c250840d63dd857187b691bd0d",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 63,
+      "nome": "movimento reduzido — negativos",
+      "resultado": "ok",
+      "log_sha256": "9df676c6ae1389e27ab20b028db9793344a7eec05b9415765c45fd313f224bc8",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 64,
+      "nome": "404 por superfície — negativos",
+      "resultado": "ok",
+      "log_sha256": "a9cf1ae6482cc5e530a39d7f601fa242fe9703708330874601ec93d48f318863",
+      "vitest": [],
+      "tap": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 65,
+      "nome": "alvo do bloqueio e regra de comissão",
+      "resultado": "ok",
+      "log_sha256": "600b07d5d06bf282fdb5e76bef59a8bda6520701852bef8ec7e85fe31e896c7c",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 66,
+      "nome": "alvo do bloqueio e regra de comissão — negativos",
+      "resultado": "ok",
+      "log_sha256": "9a48bf715a0859d38532c7faa674610db11868d73e754ae2074f4c0fdd29bab0",
+      "vitest": [],
+      "tap": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 67,
+      "nome": "vazio de texto",
+      "resultado": "ok",
+      "log_sha256": "12d9084b0fa6052d33a9b39325618f9eaffa5fa98583f505e236730333d11af0",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 68,
+      "nome": "vazio de texto — negativos",
+      "resultado": "ok",
+      "log_sha256": "8f66b80aa198e06bc31edcaabdeeef66d0c868dc5036d72bfa7cd86e8e84926e",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 69,
+      "nome": "pulo com motivo",
+      "resultado": "ok",
+      "log_sha256": "278ff9f4391f662091f84f58760e33eefd1968d2beca35c05a1edb06bbc8125b",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 70,
+      "nome": "hora com fuso",
+      "resultado": "ok",
+      "log_sha256": "58ac48f0451a579f34fad4a12f057494913df1981b8976737e689f7c17ffd785",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 71,
+      "nome": "hora com fuso — negativos",
+      "resultado": "ok",
+      "log_sha256": "2dea31b7f217c6ecc2fad285ef067712b517a75b8449456f4d8fe25ee52c9dae",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 72,
+      "nome": "entrega de OTP — negativos",
+      "resultado": "ok",
+      "log_sha256": "08d47da9b72c36e2b37962219fe70f6c9aec933d492f42a39162d821a975c73c",
+      "vitest": [],
+      "tap": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 73,
+      "nome": "rede de deploy",
+      "resultado": "ok",
+      "log_sha256": "6794a236883e4e59e69399ca78947ac313d38bde33ab361022d7dca7e5cd25f6",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 74,
+      "nome": "rede de deploy — negativos",
+      "resultado": "ok",
+      "log_sha256": "1993d7d6a0ad8ac4b4ccffcb663365a29626544bd02d9943d7e3bcb051df08ea",
+      "vitest": [],
+      "tap": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 75,
+      "nome": "criptografia de backup",
+      "resultado": "ok",
+      "log_sha256": "e0dd15723b7392392b9715848fd9951d829444e09ebb99eb020bf05114c5ed0f",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 76,
+      "nome": "criptografia de backup — runtime",
+      "resultado": "ok",
+      "log_sha256": "f8074246cff0cee7f4bc72657aff717f7eab3988ccd21cf44d07048c36d8dc41",
+      "vitest": [],
+      "tap": {
+        "tests": 5,
+        "pass": 5,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 77,
+      "nome": "portão do deploy",
+      "resultado": "ok",
+      "log_sha256": "070ed30892f3b74e2b02239d9807bdd7948467e4eca60868d20e75564ce2e4eb",
+      "vitest": [],
+      "tap": {
+        "tests": 10,
+        "pass": 10,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 78,
+      "nome": "sondas do deploy",
+      "resultado": "ok",
+      "log_sha256": "b463e61ec3104622aa212f54e99efd63eb6e23369580ca816d8626a23712f3fc",
+      "vitest": [],
+      "tap": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 79,
+      "nome": "restore com role da aplicação",
+      "resultado": "ok",
+      "log_sha256": "d0a95524fb471495a5f93b87f7ce26082963dc1095c04d87c17a1e424d1efa5a",
+      "vitest": [],
+      "tap": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 80,
+      "nome": "backup shell criptografado",
+      "resultado": "ok",
+      "log_sha256": "67ad648ea9cac4ca596a84c55237ace637105ebb7e9f2c801b968f69b2c9637c",
+      "vitest": [],
+      "tap": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 81,
+      "nome": "criptografia de backup — negativos",
+      "resultado": "ok",
+      "log_sha256": "3d2697312238dc6a9d20c337fa17331aa3009bc61d89864c73459d8cd7e38bbd",
+      "vitest": [],
+      "tap": {
+        "tests": 12,
+        "pass": 12,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 82,
+      "nome": "hardening de integrações",
+      "resultado": "ok",
+      "log_sha256": "884d13a08a92ac94802fd568ae9fc1c914fc56627f446c3516480b4b228bae86",
+      "vitest": [],
+      "tap": {
+        "tests": 6,
+        "pass": 6,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    {
+      "indice": 83,
+      "nome": "robustez operacional",
+      "resultado": "ok",
+      "log_sha256": "86b83a611b593862285acfe6661147721add2536bb898c47fa02d1a3805ee567",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 84,
+      "nome": "robustez operacional — negativos",
+      "resultado": "ok",
+      "log_sha256": "02ffb0f216745ff6146e9d06253fc7179e12e1537e7923cc26b0fc4558fcffd5",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 85,
+      "nome": "observabilidade e diagnóstico",
+      "resultado": "ok",
+      "log_sha256": "f52a89a215a53f794499f9c70a9d9b49f3b506bb1265c376adfcbee94734395a",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 86,
+      "nome": "observabilidade — negativos",
+      "resultado": "ok",
+      "log_sha256": "70479d3da855431e83f0a43585fdc78ee03158e31e62cf340cbbf9c12d472b55",
+      "vitest": [],
+      "tap": null
+    },
+    {
+      "indice": 87,
+      "nome": "cron do backup",
+      "resultado": "ok",
+      "log_sha256": "6e9d57128b66b02fa23336293fb648000f07dd0707c5e9380ee0a278e8ef7f1c",
+      "vitest": [
+        {
+          "passed": 5
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 88,
+      "nome": "trava da semente",
+      "resultado": "ok",
+      "log_sha256": "32cb525ee3535b5e84423f5deaa2b25a4fd4f9d0940867e3849a28d773d572b2",
+      "vitest": [
+        {
+          "passed": 9
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 89,
+      "nome": "semente não inventa",
+      "resultado": "ok",
+      "log_sha256": "9141b54cf310667a46238ae011c7e1b939cd04c813827df6c4b596d1aa12f20a",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 90,
+      "nome": "migração aditiva",
+      "resultado": "ok",
+      "log_sha256": "2e90cdb81cb53e4c28cad90dcb7a525708f4a653ef58570c3bccbe589d7d2e8c",
+      "vitest": [
+        {
+          "passed": 3
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 91,
+      "nome": "migrações repetíveis",
+      "resultado": "ok",
+      "log_sha256": "607294152ace34939373f1e098957286ae84c91c7edc2e106bc2f43c72bafbc2",
+      "vitest": [
+        {
+          "passed": 9
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 92,
+      "nome": "db — invariantes",
+      "resultado": "ok",
+      "log_sha256": "4e655d08ec4eb0de79b9a90ec9d2dbd60e8a64058bdff8201736cf90b1cfad0e",
+      "vitest": [
+        {
+          "passed": 10
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 93,
+      "nome": "identity — OTP, sessão e 2º fator",
+      "resultado": "ok",
+      "log_sha256": "a5ddfe2d02b4c49ad7903f0e003e6ce3a050c6235265c113171f9362ed4dfb35",
+      "vitest": [
+        {
+          "passed": 208
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 94,
+      "nome": "scheduling — integração",
+      "resultado": "ok",
+      "log_sha256": "0749c86630bdefd3b37c545feff519546409e0820edfa21220806cead0890be1",
+      "vitest": [
+        {
+          "passed": 286
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 95,
+      "nome": "onboarding — seis etapas",
+      "resultado": "ok",
+      "log_sha256": "649b4193119d5c7bfeed8fa73484bcecf3e53fc23d7efe11b648e488488f0169",
+      "vitest": [
+        {
+          "passed": 18
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 96,
+      "nome": "catalog — CRUD do admin",
+      "resultado": "ok",
+      "log_sha256": "7123632cacb26c02ce2a9a448b8b329b35572a028c772fc030b20fcc3aa912ce",
+      "vitest": [
+        {
+          "passed": 53
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 97,
+      "nome": "finance — comanda, caixa e fiado",
+      "resultado": "ok",
+      "log_sha256": "897cbc061e67f83b97794fb6c4c906087ccb24b363b4e90dc0b7b10f2c4de4c7",
+      "vitest": [
+        {
+          "passed": 544
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 98,
+      "nome": "crm — a ficha do cliente",
+      "resultado": "ok",
+      "log_sha256": "70aa8a9194d958e51d16191f49421137820004b9ddfa2a298a85d2f615c57cb9",
+      "vitest": [
+        {
+          "passed": 428
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 99,
+      "nome": "jobs — fila, avisos e falta automática",
+      "resultado": "ok",
+      "log_sha256": "b4a757badf533041e252fcb1ddb66ea0a77a5d7ab586d23188bae767bfcf20ef",
+      "vitest": [
+        {
+          "passed": 101
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 100,
+      "nome": "platform — planos, bloqueio e a porta do Super Admin",
+      "resultado": "ok",
+      "log_sha256": "3362cac182c151b2432a022635d1282f9f6b940d5fdef50a922bdb52b73c59d6",
+      "vitest": [
+        {
+          "passed": 262
+        }
+      ],
+      "tap": null
+    },
+    {
+      "indice": 101,
+      "nome": "api — e2e",
+      "resultado": "ok",
+      "log_sha256": "c885fe8aa3e83abaad1ac6a2880e314767584bc9f3ce258e5435b3c3cfd0f2b9",
+      "vitest": [
+        {
+          "passed": 545
+        }
+      ],
+      "tap": null
+    }
+  ],
+  "total_vitest": {
+    "passed": 4266,
+    "failed": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "total_tap": {
+    "tests": 313,
+    "pass": 313,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "observacao": "Contagens dos resumos dos runners. Não somam asserts SQL nem scripts sem resumo numérico. Logs completos preservados no runtime privado; este resumo não copia entradas nem payloads."
+}

@@ -25,11 +25,16 @@ titulo() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 morrer() { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 
 cd "$DESTINO"
+# Conserva a sonda do procedimento mesmo ao fazer checkout de uma versão antiga.
+VALIDADOR="$(mktemp --suffix=.mjs)"
+cp "$DESTINO/deploy/verificar-prontidao.mjs" "$VALIDADOR"
+trap 'rm -f "$VALIDADOR"' EXIT
 ALVO="${1:-$(cat "$DESTINO/.versao-anterior" 2>/dev/null || true)}"
 [ -n "$ALVO" ] || morrer "não sei para onde voltar: passe o commit, ou rode depois de um deploy/atualizar.sh"
 
 titulo "voltando para $(git rev-parse --short "$ALVO")"
 git reset --hard --quiet "$ALVO"
+export APP_VERSION="$(git rev-parse HEAD)"
 
 titulo "construindo a anterior"
 $COMPOSE build
@@ -38,6 +43,7 @@ titulo "subindo"
 # Sem `preparar`: **não se desfaz migração**. A coluna nova fica no banco e a
 # versão anterior a ignora, que é exatamente o que a torna reversível.
 $COMPOSE up -d --no-deps api worker web
+$COMPOSE up -d --no-deps --force-recreate caddy
 
 # Conferir antes de dizer "no ar", como o `atualizar.sh` já fazia.
 #
@@ -52,7 +58,8 @@ $COMPOSE up -d --no-deps api worker web
 DOMINIO_NO_ENV="$(grep -E '^DOMINIO=' .env | cut -d= -f2 | tr -d '"' || true)"
 titulo "conferindo"
 for _ in $(seq 1 30); do
-  if curl -fsS --max-time 5 "https://$DOMINIO_NO_ENV/" > /dev/null 2>&1; then
+  if node "$VALIDADOR" "$APP_VERSION" > /dev/null 2>&1 \
+    && curl -fsS --max-time 5 "https://$DOMINIO_NO_ENV/" > /dev/null 2>&1; then
     printf '\n\033[32mno ar na versão %s. O banco não foi tocado.\033[0m\n' "$(git rev-parse --short HEAD)"
     exit 0
   fi

@@ -1,0 +1,11 @@
+{
+  "name": "segredos-estado-v6",
+  "command": [
+    "node",
+    "scripts/verificar-segredos.mjs",
+    "--history"
+  ],
+  "started_utc": "2026-09-10T08:53:34.229795+00:00",
+  "duration_seconds": 3.24,
+  "exit_code": 0
+}

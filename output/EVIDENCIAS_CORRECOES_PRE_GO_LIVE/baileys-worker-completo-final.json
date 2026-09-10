@@ -1,0 +1,10 @@
+{
+  "name": "baileys-worker-completo-final",
+  "command": [
+    "python3",
+    "output/prova_baileys_worker_navegador.py"
+  ],
+  "started_utc": "2026-09-10T06:50:11.580591+00:00",
+  "duration_seconds": 42.23,
+  "exit_code": 0
+}

@@ -34,13 +34,13 @@ x-imagem: &imagem
     dockerfile: Dockerfile
   restart: unless-stopped
 
-x-ambiente: &ambiente
+x-api: &api
   NODE_ENV: production
+  APP_VERSION: ${APP_VERSION:-dev}
+  INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET:?falta no .env}
   # Sem nenhum `:-` de reserva: todas falham alto quando ausentes, e é assim
   # que o produto foi escrito. Um padrão fraco aqui deixaria segredo em repouso
   # cifrado com chave conhecida, e ninguém descobriria.
-  APP_DB_PASSWORD: ${APP_DB_PASSWORD:?rode deploy/instalar.sh para gerar o .env}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta no .env}
   STAFF_EMAIL_PEPPER: ${STAFF_EMAIL_PEPPER:?falta no .env}
   OTP_PEPPER: ${OTP_PEPPER:?falta no .env}
   MFA_SECRET_KEY: ${MFA_SECRET_KEY:?falta no .env}
@@ -49,9 +49,6 @@ x-ambiente: &ambiente
   WHATSAPP_TOKEN_KEY: ${WHATSAPP_TOKEN_KEY:?falta no .env}
   KYC_INTENT_HMAC_SECRET: ${KYC_INTENT_HMAC_SECRET:?falta no .env}
   MARKETPLACE_ORIGIN_SECRET: ${MARKETPLACE_ORIGIN_SECRET:?falta no .env}
-  # Backup cifrado: chave própria, porque restaurar não pode depender de a
-  # chave do segundo fator continuar a mesma.
-  BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?falta no .env}
   # OTP e credencial de primeiro acesso por WhatsApp. `console` é o padrão e
   # não exige nada; `meta` exige os quatro abaixo.
   IDENTITY_MESSAGING_MODO: ${IDENTITY_MESSAGING_MODO:-console}
@@ -61,9 +58,6 @@ x-ambiente: &ambiente
   IDENTITY_WHATSAPP_STAFF_TEMPLATE: ${IDENTITY_WHATSAPP_STAFF_TEMPLATE:-}
   IDENTITY_WHATSAPP_LANGUAGE: ${IDENTITY_WHATSAPP_LANGUAGE:-pt_BR}
   DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
-  ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
-  # De servidor para servidor, dentro da rede do compose.
-  API_URL: http://api:3000
   # Mídia: local serve desenvolvimento/instalação simples; `s3` usa um
   # bucket privado S3/R2/MinIO, mantendo a URL pública em /media/... .
   MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
@@ -82,8 +76,11 @@ x-ambiente: &ambiente
   # operação legítima: a plataforma fatura pelo extrato e a nota não é
   # oferecida. Trocar aqui é o que liga cada uma.
   PSP_MODO: ${PSP_MODO:-nenhum}
+  COMANDA_PSP_MODO: ${COMANDA_PSP_MODO:-nenhum}
   FISCAL_MODO: ${FISCAL_MODO:-nenhum}
+  FISCAL_SECRET_KEY: ${FISCAL_SECRET_KEY:-}
   STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
   STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
   PSP_WEBHOOK_SECRET: ${PSP_WEBHOOK_SECRET:-}
   WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
@@ -91,6 +88,7 @@ x-ambiente: &ambiente
   # O canal de mensagem deste processo (bloco 82). `nenhum` é o padrão de
   # fábrica: tudo continua saindo pelo canal de reserva, e nada vai para a
   # internet sem alguém ter decidido.
+  BAILEYS_HABILITADO: ${BAILEYS_HABILITADO:-0}
   WHATSAPP_MODO: ${WHATSAPP_MODO:-nenhum}
   # O app da plataforma na Meta, para o Embedded Signup (bloco 83). Vazios, a
   # tela não desenha o botão e o cadastro à mão continua sendo o caminho.
@@ -113,6 +111,14 @@ x-ambiente: &ambiente
   TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
 
 services:
+  validar:
+    <<: *imagem
+    restart: 'no'
+    environment:
+      <<: *api
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:?falta no .env}
+    command: node scripts/verificar-configuracao-producao.mjs
+
   db:
     image: postgres:16
     restart: unless-stopped
@@ -136,9 +142,18 @@ services:
     <<: *imagem
     restart: 'no'
     depends_on:
+      validar:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
-    environment: *ambiente
+    environment:
+      NODE_ENV: production
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?falta no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?falta no .env}
+      ADMIN_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/postgres
+      # Adoção de legado é explícita e valida o schema; limpar após o uso.
+      MIGRATION_ADOPT_THROUGH: ${MIGRATION_ADOPT_THROUGH:-}
+      IDENTITY_MESSAGING_MODO: ${IDENTITY_MESSAGING_MODO:-console}
     # Cria o banco, o role sem BYPASSRLS e aplica as migrações que faltam.
     # Serviço próprio e não um passo dentro da API: migração que roda junto com
     # a aplicação roda uma vez por réplica.
@@ -152,7 +167,6 @@ services:
     command: >
       bash -c '
         set -e
-        node scripts/verificar-configuracao-producao.mjs
         psql "$$ADMIN_DATABASE_URL" -q -tAc "SELECT 1 FROM pg_database WHERE datname = '"'"'barbearia'"'"'" | grep -q 1 \
           || psql "$$ADMIN_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE barbearia"
         scripts/bootstrap-role.sh > /dev/null
@@ -165,7 +179,7 @@ services:
     depends_on:
       preparar:
         condition: service_completed_successfully
-    environment: *ambiente
+    environment: *api
     volumes:
       - media:/data/media
     command: node apps/api/dist/main.js
@@ -181,15 +195,41 @@ services:
     depends_on:
       preparar:
         condition: service_completed_successfully
-    environment: *ambiente
+    environment:
+      NODE_ENV: production
+      APP_VERSION: ${APP_VERSION:-dev}
+      WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?falta no .env}
+      WHATSAPP_TOKEN_KEY: ${WHATSAPP_TOKEN_KEY:?falta no .env}
+      KYC_INTENT_HMAC_SECRET: ${KYC_INTENT_HMAC_SECRET:?falta no .env}
+      DATABASE_URL: postgres://barbearia_app:${APP_DB_PASSWORD}@db:5432/barbearia
+      WEB_URL: https://${DOMINIO:?falta no .env}
+      PSP_MODO: ${PSP_MODO:-nenhum}
+      COMANDA_PSP_MODO: ${COMANDA_PSP_MODO:-nenhum}
+      FISCAL_MODO: ${FISCAL_MODO:-nenhum}
+      FISCAL_SECRET_KEY: ${FISCAL_SECRET_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      BAILEYS_HABILITADO: ${BAILEYS_HABILITADO:-0}
+      WHATSAPP_MODO: ${WHATSAPP_MODO:-nenhum}
     command: node apps/worker/dist/main.js
+    healthcheck:
+      test: ['CMD', 'node', 'scripts/worker-pronto.mjs']
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 120s
 
   web:
     <<: *imagem
     depends_on:
       api:
         condition: service_healthy
-    environment: *ambiente
+    environment:
+      NODE_ENV: production
+      APP_VERSION: ${APP_VERSION:-dev}
+      API_URL: http://api:3000
+      WEB_URL: https://${DOMINIO:?falta no .env}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET:?falta no .env}
     command: pnpm --filter @barbearia/web exec next start -p 3001 -H 0.0.0.0
 
   caddy:
@@ -201,6 +241,7 @@ services:
     environment:
       DOMINIO: ${DOMINIO:?falta no .env}
       ACME_EMAIL: ${ACME_EMAIL:?falta no .env}
+      INTERNAL_PROXY_SECRET: ${INTERNAL_PROXY_SECRET:?falta no .env}
     ports:
       - '80:80'
       - '443:443'

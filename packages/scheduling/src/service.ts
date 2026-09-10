@@ -328,6 +328,7 @@ export async function getAvailabilityRange(
       locationId: request.locationId,
       serviceIds: request.serviceIds,
       dates,
+      ...(request.now ? { now: request.now } : {}),
       ...(request.professionalId ? { professionalId: request.professionalId } : {}),
       ...(request.atCounter ? { atCounter: true } : {}),
       ...(request.ignoreAppointmentId

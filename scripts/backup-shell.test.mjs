@@ -6,6 +6,8 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { descriptografar } from './backup-crypto.mjs';
 
+const ambiente = { ...process.env };
+delete ambiente.BACKUP_ENCRYPTION_KEY;
 const RAIZ=resolve(import.meta.dirname,'..');
 
 test('backup.sh não deixa dump plaintext e produz artefato GCM restaurável', async()=>{
@@ -19,7 +21,7 @@ test('backup.sh não deixa dump plaintext e produz artefato GCM restaurável', a
     await cp(join(RAIZ,'scripts','backup-crypto.mjs'),join(destino,'scripts','backup-crypto.mjs'));
     const docker=join(bin,'docker');
     await writeFile(docker,`#!/bin/sh\ncase "$*" in\n  *"pg_dump"*) head -c 25000 /dev/zero ;;\n  *"pg_restore --list"*) cat >/dev/null; exit 0 ;;\n  *) exit 0 ;;\nesac\n`); await chmod(docker,0o755);
-    const r=spawnSync('bash',[join(RAIZ,'deploy','backup.sh')],{encoding:'utf8',env:{...process.env,DESTINO:destino,BACKUP_PASTA:pasta,PATH:`${bin}:${process.env.PATH}`}});
+    const r=spawnSync('bash',[join(RAIZ,'deploy','backup.sh')],{encoding:'utf8',env:{...ambiente,DESTINO:destino,BACKUP_PASTA:pasta,PATH:`${bin}:${process.env.PATH}`}});
     assert.equal(r.status,0,r.stderr||r.stdout);
     const nomes=await readdir(pasta);
     const enc=nomes.find(n=>n.endsWith('.dump.enc')); assert.ok(enc,`sem .dump.enc: ${nomes}`);
@@ -67,7 +69,7 @@ test('backup da mídia sai mesmo com o contêiner da API reiniciando', async()=>
       'esac',
       '',
     ].join('\n')); await chmod(docker,0o755);
-    const r=spawnSync('bash',[join(RAIZ,'deploy','backup.sh')],{encoding:'utf8',env:{...process.env,DESTINO:destino,BACKUP_PASTA:pasta,PATH:`${bin}:${process.env.PATH}`}});
+    const r=spawnSync('bash',[join(RAIZ,'deploy','backup.sh')],{encoding:'utf8',env:{...ambiente,DESTINO:destino,BACKUP_PASTA:pasta,PATH:`${bin}:${process.env.PATH}`}});
     assert.equal(r.status,0,r.stderr||r.stdout);
     const nomes=await readdir(pasta);
     assert.ok(nomes.find(n=>n.endsWith('.dump.enc')),`sem dump: ${nomes}`);

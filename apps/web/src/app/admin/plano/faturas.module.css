@@ -1,0 +1,35 @@
+/* Valor e confirmação permanecem juntos, inclusive dentro do painel estreito. */
+.lista {
+  container-type: inline-size;
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+}
+.fatura {
+  padding-block: var(--space-4);
+  border-block-start: 1px solid var(--color-border);
+}
+.dados {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas: "vencimento valor" "referencia referencia" "situacao situacao";
+  gap: var(--space-3);
+  margin: 0;
+}
+.dados > div { min-inline-size: 0; }
+.dados dt {
+  margin-block-end: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.dados dd { margin: 0; overflow-wrap: anywhere; }
+.vencimento { grid-area: vencimento; }
+.referencia { grid-area: referencia; }
+.valor { grid-area: valor; }
+.situacao { grid-area: situacao; }
+@container (min-width: 44rem) {
+  .dados {
+    grid-template-columns: minmax(7rem, 1fr) minmax(0, 2fr) minmax(6rem, 1fr) minmax(12rem, 1.5fr);
+    grid-template-areas: "vencimento referencia valor situacao";
+  }
+}

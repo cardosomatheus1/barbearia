@@ -609,6 +609,30 @@ export async function conciliarWhatsAppDaUnidade(
   return { promovido, templates: conciliados };
 }
 
+/** Concilia todas as unidades do tenant, sem deixar uma falha impedir as demais. */
+export async function conciliarWhatsAppDoTenant(
+  tenantId: string,
+  agora: Date,
+  conciliar = conciliarWhatsAppDaUnidade,
+): Promise<{ promovido: boolean; templates: number; unidades: number; falhas: number }> {
+  const unidades = await withTenant(tenantId, (tx) => tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM locations ORDER BY id
+  `);
+  const total = { promovido: false, templates: 0, unidades: unidades.length, falhas: 0 };
+  for (const unidade of unidades) {
+    try {
+      const resultado = await conciliar(tenantId, unidade.id, agora);
+      total.promovido ||= resultado.promovido;
+      total.templates += resultado.templates;
+    } catch {
+      // O worker retenta a tarefa após visitar a rede inteira. Não propagamos
+      // resposta/credencial do provedor para logs de infraestrutura.
+      total.falhas += 1;
+    }
+  }
+  return total;
+}
+
 /**
  * O de mentira, **só** quando não há canal ligado (bloco 82, movido no 133).
  *

@@ -53,6 +53,7 @@ export class StripeError extends Error {
     readonly status: number,
     readonly code: string,
     mensagem: string,
+    readonly paymentIntentId: string | null = null,
   ) {
     super(mensagem);
     this.name = 'StripeError';
@@ -205,11 +206,13 @@ export class StripeCliente {
        * confissão de detalhe interno. Quem traduz é a borda; aqui o texto vai
        * inteiro para o log e para a trilha.
        */
-      const erro = (json['error'] ?? {}) as { code?: string; message?: string; type?: string };
+      const erro = (json['error'] ?? {}) as { code?: string; message?: string; type?: string; payment_intent?: { id?: unknown } };
+      const pi = erro.payment_intent?.id;
       throw new StripeError(
         resposta.status,
         erro.code ?? erro.type ?? 'stripe_error',
         erro.message ?? `Stripe respondeu ${resposta.status}`,
+        typeof pi === 'string' && /^pi_[A-Za-z0-9]+$/.test(pi) ? pi : null,
       );
     }
 

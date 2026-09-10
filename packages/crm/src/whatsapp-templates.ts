@@ -13,10 +13,13 @@ import {
   type TipoDeNotificacao,
   type WhatsAppProvider,
 } from '@barbearia/core';
+import { canalDaUnidade } from './baileys/sessao.js';
 import { recusar } from './whatsapp-erros.js';
 import { registrarFalhaDaSubmissao, reservarSubmissaoDeTemplate } from './whatsapp-template-submissao.js';
 
 export interface TemplateNaTela {
+  readonly canal: 'meta' | 'baileys';
+  readonly disponivel: boolean;
   readonly id: string;
   readonly tipo: TipoDeNotificacao;
   readonly nome: string;
@@ -51,7 +54,7 @@ export interface TemplateNaTela {
 
 const COLUNAS_DO_TEMPLATE = sql`id, kind::text AS kind, name, titulo, language,
                                 status::text AS status, body, buttons, rejection_reason,
-                                submission_state = 'sending' AS na_fila`;
+                                submission_state = 'sending' AS na_fila, transport, local_enabled`;
 
 const paraTela = (l: {
   id: string;
@@ -64,7 +67,11 @@ const paraTela = (l: {
   buttons: unknown;
   rejection_reason: string | null;
   na_fila: boolean;
+  transport: 'meta' | 'baileys';
+  local_enabled: boolean;
 }): TemplateNaTela => ({
+  canal: l.transport,
+  disponivel: l.transport === 'baileys' ? l.local_enabled : l.status === 'aprovado',
   id: l.id,
   tipo: l.kind,
   nome: l.name,
@@ -88,7 +95,8 @@ export async function templatesDaUnidade(
        WHERE location_id = ${locationId}::uuid
        ORDER BY kind, created_at DESC
     `);
-    return linhas.map(paraTela);
+    const canal = await canalDaUnidade({ tenantId, locationId }, tx);
+    return linhas.map(l => { const t = paraTela(l); return { ...t, disponivel: t.disponivel && t.canal === canal }; });
   });
 }
 
@@ -314,6 +322,7 @@ export async function gravarRespostaDoTemplate(params: {
              submission_updated_at = now(),
              updated_at = now()
        WHERE id = ${params.templateId}::uuid
+         AND transport = 'meta'
          AND (${params.claim ?? null}::uuid IS NULL OR submission_claim = ${params.claim ?? null}::uuid)
     `;
   });
@@ -328,7 +337,7 @@ export async function templatesEmCurso(
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<{ id: string; name: string; language: string }[]>`
       SELECT id, name, language FROM whatsapp_templates
-       WHERE status = 'pendente'
+       WHERE status = 'pendente' AND transport = 'meta'
          AND (${locationId ?? null}::uuid IS NULL OR location_id = ${locationId ?? null}::uuid)
          AND (submission_state <> 'sending'
               OR submission_updated_at < now() - interval '2 minutes')
@@ -342,4 +351,3 @@ export async function templatesEmCurso(
 // ---------------------------------------------------------------------------
 // O envio
 // ---------------------------------------------------------------------------
-

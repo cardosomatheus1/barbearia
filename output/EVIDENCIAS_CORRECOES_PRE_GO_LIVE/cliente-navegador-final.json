@@ -1,0 +1,10 @@
+{
+  "name": "cliente-navegador-final",
+  "command": [
+    "python3",
+    "output/prova_pilha_complementar.py"
+  ],
+  "started_utc": "2026-09-10T06:48:58.445606+00:00",
+  "duration_seconds": 7.13,
+  "exit_code": 0
+}

@@ -2,6 +2,8 @@ import {
   MOTIVOS_DA_CONTESTACAO_DE_COMISSAO,
   ROTULO_DO_MOTIVO_DE_COMISSAO,
 } from '@barbearia/core';
+import { AutenticarCobranca } from './autenticar-cobranca';
+import estilosFaturas from './faturas.module.css';
 import { randomUUID } from 'node:crypto';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
@@ -16,7 +18,7 @@ import {
 } from '@/lib/admin-api';
 import { painelOuDesvio } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
-import { acaoContestarMarketplace, acaoSair, acaoTrocarDePlano } from '../acoes';
+import { acaoCadastrarCartaoSaas, acaoConciliarCartaoSaas, acaoContestarMarketplace, acaoSair, acaoTrocarDePlano } from '../acoes';
 import { secao } from '../secoes';
 import { reais } from '@/lib/dinheiro';
 import { FalhaDaLeitura } from '../falha-da-leitura';
@@ -164,7 +166,7 @@ const ESTADO_DA_FATURA: Readonly<Record<FaturaDaBarbearia['estado'], string>> = 
 export default async function PlanoPage({
   searchParams,
 }: {
-  readonly searchParams: Promise<{ trocado?: string; erro?: string }>;
+  readonly searchParams: Promise<{ trocado?: string; erro?: string; cartao?: string }>;
 }) {
   const parametros = await searchParams;
   const token = await lerSessaoGestor();
@@ -228,7 +230,7 @@ export default async function PlanoPage({
       ) : null}
       {parametros.erro ? (
         <div className="ui-alert ui-alert--danger" role="alert">
-          Não deu para trocar de plano ({parametros.erro}). Confira a mensagem e tente de novo.
+          Não foi possível concluir a operação ({parametros.erro}). Tente novamente.
         </div>
       ) : null}
 
@@ -298,6 +300,14 @@ export default async function PlanoPage({
 
       <section className="painel__grupo">
         <h2 className="painel__secao">Como a conta é paga</h2>
+        {parametros.cartao === 'retorno' || parametros.cartao === 'consultado' ? (
+          <div className="ui-alert ui-alert--info" role="status">
+            O cartão aparece abaixo depois da confirmação. Se os dados ainda não mudaram, confira novamente.
+            <form action={acaoConciliarCartaoSaas}>
+              <button className="ui-button ui-button--ghost" type="submit">Conferir cartão</button>
+            </form>
+          </div>
+        ) : null}
         {p.cobranca?.cadastrado ? (
           <>
             <p className="plano-cartao">
@@ -310,8 +320,7 @@ export default async function PlanoPage({
               ) : null}
             </p>
             <p className="painel__nota">
-              A mensalidade é debitada neste cartão no vencimento. Para trocá-lo, fale com o
-              suporte.
+              A mensalidade do software é debitada neste cartão no vencimento.
             </p>
           </>
         ) : (
@@ -321,11 +330,25 @@ export default async function PlanoPage({
           <div className="plano__vazio">
             <p className="plano-cartao__sem">Nenhum cartão cadastrado.</p>
             <p>
-              As faturas são pagas por transferência, e alguém do suporte precisa dar baixa. Para
-              deixar automático, fale com o suporte.
+              {p.cadastroCartaoDisponivel
+                ? 'Cadastre um cartão para pagar automaticamente a assinatura do software.'
+                : 'Para pagar as faturas por transferência, entre em contato com o suporte.'}
             </p>
           </div>
         )}
+        {p.cadastroCartaoDisponivel ? (
+          <form action={acaoCadastrarCartaoSaas}>
+            <input type="hidden" name="idempotencyKey" value={randomUUID()} />
+            <label>
+              <input type="checkbox" name="consentiu" required />{' '}
+              Autorizo a cobrança recorrente da assinatura, conforme o plano e os valores do extrato desta página.
+            </label>
+            <p className="painel__nota">Você cadastra o cartão na página segura da Stripe. Este cadastro não faz cobrança.</p>
+            <button className="ui-button ui-button--primary" type="submit">
+              {p.cobranca?.cadastrado ? 'Trocar cartão' : 'Cadastrar cartão'}
+            </button>
+          </form>
+        ) : null}
       </section>
 
       {/**
@@ -455,41 +478,42 @@ export default async function PlanoPage({
             {emAberto.length > 0 ? (
               <p className="plano__aviso">
                 {emAberto.length === 1 ? 'Há 1 fatura em aberto' : `Há ${emAberto.length} faturas em aberto`}
-                . Pague por transferência e fale com o suporte para dar baixa.
+                . {p.cadastroCartaoDisponivel ? 'A cobrança usa o cartão cadastrado. Se o banco pedir confirmação, use Verificar cobrança na fatura.' : 'Pague por transferência e fale com o suporte para dar baixa.'}
               </p>
             ) : null}
-            <div className="ui-scroll-x">
-              <table className="plano-faturas">
-                <thead>
-                  <tr>
-                    <th scope="col">Vencimento</th>
-                    <th scope="col">Referente a</th>
-                    <th scope="col">Valor</th>
-                    <th scope="col">Situação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {faturas.map((f) => (
-                    <tr key={f.id}>
-                      <td>{dia(f.vencimento)}</td>
-                      <td>
+            <ul className={estilosFaturas.lista} aria-label="Faturas do plano">
+              {faturas.map((f) => (
+                <li key={f.id} className={estilosFaturas.fatura}>
+                  <dl className={estilosFaturas.dados}>
+                    <div className={estilosFaturas.vencimento}>
+                      <dt>Vencimento</dt><dd>{dia(f.vencimento)}</dd>
+                    </div>
+                    <div className={estilosFaturas.referencia}>
+                      <dt>Referente a</dt>
+                      <dd>
                         {f.tipo === 'proration'
                           ? 'Acerto da troca de plano'
                           : f.tipo === 'marketplace'
                             ? `Clientes da busca · ${dia(f.periodoDe)} a ${dia(f.periodoAte)}`
                             : `${dia(f.periodoDe)} a ${dia(f.periodoAte)}`}
-                      </td>
-                      <td>{reais(f.valorCents)}</td>
-                      <td>
+                      </dd>
+                    </div>
+                    <div className={estilosFaturas.valor}>
+                      <dt>Valor</dt><dd className="tabular">{reais(f.valorCents)}</dd>
+                    </div>
+                    <div className={estilosFaturas.situacao}>
+                      <dt>Situação</dt>
+                      <dd>
                         <span className={`plano-fatura__estado plano-fatura__estado--${f.estado}`}>
                           {ESTADO_DA_FATURA[f.estado]}
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        {f.cobrancaEmCurso ? <AutenticarCobranca faturaId={f.id} /> : null}
+                      </dd>
+                    </div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
           </>
         )}
       </section>

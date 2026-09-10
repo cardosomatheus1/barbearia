@@ -92,8 +92,10 @@ const AREAS = [
   // acusaria a tela por um dado que ela não mostra.
   ['fiscal', '/admin/fiscal', 'gerente', `SELECT count(*) FROM fiscal_invoices`],
   ['whatsapp', '/admin/whatsapp', 'dono', `SELECT count(*) FROM whatsapp_templates`],
-  ['automacoes', '/admin/automacoes', 'gerente', `SELECT count(*) FROM automations`],
-  ['campanhas', '/admin/campanhas', 'gerente', `SELECT count(*) FROM campaigns`],
+  // O gerente padrão não possui marketing.send. Conferir sua página de recusa
+  // não prova que as campanhas e automações existentes aparecem na tela.
+  ['automacoes', '/admin/automacoes', 'dono', `SELECT count(*) FROM automations`],
+  ['campanhas', '/admin/campanhas', 'dono', `SELECT count(*) FROM campaigns`],
   ['retencao', '/admin/retencao', 'dono', `SELECT count(*) FROM customers`],
   ['lgpd', '/admin/lgpd', 'dono', `SELECT count(*) FROM data_requests`],
   ['meu-dia', '/admin/meu-dia', 'barbeiro', `SELECT count(*) FROM appointments WHERE starts_at::date = current_date`],
@@ -321,6 +323,10 @@ for (const [nome, rota, papel, pergunta] of AREAS) {
     falhas.push(`${nome}: ${papel} foi desviado de ${rota} para ${page.url()}`);
     continue;
   }
+  if (await page.locator('main > [data-recusa="permissao"]').count()) {
+    falhas.push(`${nome}: ${papel} recebeu recusa; a conferência não leu os dados da tela`);
+    continue;
+  }
 
   // V8 técnico nas duas larguras de aceite. Restauramos o desktop porque a
   // próxima navegação do laço foi originalmente medida nele.
@@ -351,6 +357,18 @@ for (const [nome, rota, papel, pergunta] of AREAS) {
 }
 
 // ---------------------------------------------------------------------------
+// A recusa também precisa de título, saída e sem controles de escrita.
+for (const [rota, titulo] of [['/admin/automacoes', 'Automações'], ['/admin/campanhas', 'Campanhas']]) {
+  const page = paginas['gerente'];
+  await page.goto(`${WEB}${rota}`, { waitUntil: 'networkidle' });
+  if (!(await page.locator('main > [data-recusa="permissao"]').count()) ||
+      await page.locator('h1').textContent() !== titulo ||
+      await page.locator('input[name="nome"]').count()) {
+    falhas.push(`${rota}: recusa do gerente sem título ou com formulário de escrita`);
+  }
+  for (const largura of [360, 390, 768, 1280]) registrarAuditoria(await auditarSuperficie(page, rota, largura));
+}
+
 // V8 técnico — todas as portas visíveis do dono
 // ---------------------------------------------------------------------------
 

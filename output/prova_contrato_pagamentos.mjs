@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import { StripeCliente } from '../packages/platform/dist/stripe.js';
+import { StripePaymentProvider } from '../packages/platform/dist/stripe-pagamento.js';
+import { adquirenteDoSplit } from '../packages/platform/dist/adquirente.js';
+import { modoFiscal } from '../packages/finance/dist/fiscal-emissor.js';
+const calls=[];
+process.env.STRIPE_SECRET_KEY='sk_test_audit_synthetic_not_a_credential';
+const client=new StripeCliente(async(url,init)=>{
+ const form=new URLSearchParams(init.body);
+ calls.push({resource:new URL(url).pathname,method:form.get('payment_method_types[0]'),hasPaymentMethod:form.has('payment_method'),confirm:form.get('confirm')});
+ return new Response(JSON.stringify({id:'pi_audit_synthetic',status:'requires_payment_method',client_secret:'synthetic_discarded_secret'}),{status:200,headers:{'content-type':'application/json'}});
+});
+const result=await new StripePaymentProvider(client).criarCobranca({tenantId:'10000000-0000-4000-8000-000000000001',orderId:'10000000-0000-4000-8000-000000000002',meio:'cartao',valorCents:5000,descricao:'Auditoria sintética',idempotencyKey:'audit-card-contract'});
+assert.equal(result.estado,'aguardando');
+assert.equal(calls[0].hasPaymentMethod,false);
+assert.equal(calls[0].confirm,null);
+assert.equal(result.url,undefined);
+assert.equal(result.pixCopiaECola,undefined);
+assert.equal(Object.hasOwn(result,'clientSecret'),false);
+assert.equal(Object.hasOwn(result,'client_secret'),false);
+console.log(JSON.stringify({scenario:'Cartão sem captura/confirmação',request:calls[0],result_state:result.estado,has_checkout_url:false,has_confirmation_secret:false,conclusion:'O adapter deixa a intenção aguardando e não oferece ao consumidor os dados necessários para concluir o cartão. Confirmar ausência do consumidor pelo inventário/UI.',external_calls:false}));
+const old=process.env.NODE_ENV;
+process.env.NODE_ENV='production';
+assert.throws(()=>modoFiscal('fake'),/não pode ser usado em produção/);
+assert.throws(()=>modoFiscal('real'),/não há emissor/);
+console.log(JSON.stringify({scenario:'Fiscal real',allowed_modes:['nenhum','fake'],production_fake_rejected:true,real_provider_supported:false}));
+console.log(JSON.stringify({scenario:'Split',provider:adquirenteDoSplit().constructor.name,external_provider:false}));
+if(old===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=old;

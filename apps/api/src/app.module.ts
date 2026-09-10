@@ -1,3 +1,4 @@
+import { proxyConfiavel } from './common/proxy-confiavel.js';
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { cabecalhosDeSeguranca } from './common/cabecalhos.middleware.js';
@@ -44,6 +45,8 @@ import { PacoteController } from './admin/pacote.controller.js';
 import { FinanceiroController } from './admin/financeiro.controller.js';
 import { DreController } from './admin/dre.controller.js';
 import { FiscalController } from './admin/fiscal.controller.js';
+import { FiscalNacionalController } from './admin/fiscal-nacional.controller.js';
+import { FiscalDocumentoController } from './booking/fiscal-documento.controller.js';
 import { FranquiaController } from './admin/franquia.controller.js';
 import { RedeController } from './admin/rede.controller.js';
 import { PublicaController } from './publica/publica.controller.js';
@@ -51,6 +54,7 @@ import { ChavesController } from './admin/chaves.controller.js';
 import { WebhooksController } from './admin/webhooks.controller.js';
 import { ChaveGuard } from './publica/chave.guard.js';
 import { WhatsAppController } from './admin/whatsapp.controller.js';
+import { WhatsAppConexaoController } from './admin/whatsapp-conexao.controller.js';
 import { AutomacaoController } from './admin/automacao.controller.js';
 import { CampanhaController } from './admin/campanha.controller.js';
 import { SegmentoController } from './admin/segmento.controller.js';
@@ -130,12 +134,15 @@ import { MediaController } from './media/media.controller.js';
     FinanceiroController,
     DreController,
     FiscalController,
+    FiscalNacionalController,
+    FiscalDocumentoController,
     FranquiaController,
     RedeController,
     PublicaController,
     ChavesController,
     WebhooksController,
     WhatsAppController,
+    WhatsAppConexaoController,
     AutomacaoController,
     CampanhaController,
     SegmentoController,
@@ -190,6 +197,6 @@ export class AppModule implements NestModule {
    * curinga sem nome — e a forma entre chaves é a que casa também com a raiz.
    */
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(cabecalhosDeSeguranca).forRoutes('{*splat}');
+    consumer.apply(proxyConfiavel, cabecalhosDeSeguranca).forRoutes('{*splat}');
   }
 }

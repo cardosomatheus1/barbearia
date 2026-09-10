@@ -31,7 +31,12 @@
  *   `NOT VALID` de propósito, para a criação não varrer a tabela e travar o
  *   deploy contra uma linha legada — o motivo está escrito na migração.
  */
-export const HEAD_AUDITADO = '0119';
+// 0120–0126: cadastro SaaS e reserva financeira com escrita da plataforma;
+// fiscal/Baileys com FORCE RLS e FKs compostas; credenciais cifradas;
+// rota nota reservada; convite cifrado apagado ao encerrar. Invariantes do
+// Postgres reexecutadas em migracoes-0120-0126-db. Não atesta homologação externa.
+// 0127: somente descrição do recurso fiscal. Invariantes reexecutadas em migracao-texto-fiscal-db.
+export const HEAD_AUDITADO = '0127';
 
 /** As migrações que a auditoria cumulativa exige que continuem existindo. */
 export const MIGRACOES_AUDITADAS = [

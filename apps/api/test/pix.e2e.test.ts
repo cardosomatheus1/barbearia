@@ -5,7 +5,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConsoleMessagingProvider, codigoDoPasso, passoAgora } from '@barbearia/identity';
 import { assinarWebhook } from '@barbearia/platform';
 import { CaixaController } from '../src/admin/caixa.controller.js';
@@ -66,7 +66,7 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
     // configurou adquirente veria um Pix de mentira na tela e o cliente iria
     // embora achando que pagou. O que se prova aqui é o caminho do produto, não
     // que a Stripe responde.
-    process.env['PSP_MODO'] = 'fake';
+    process.env['COMANDA_PSP_MODO'] = 'fake';
     admin = new PrismaClient({ datasources: { db: { url: SEED_URL } } });
 
     const moduleRef = await Test.createTestingModule({
@@ -108,6 +108,11 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
   beforeEach(async () => {
     await limparBanco(admin, ['tenants', 'staff_directory']);
     tenants.forget('domari-barber-club');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const http = () => request(app.getHttpServer());
@@ -287,6 +292,27 @@ describeIfDb('o Pix da comanda pela HTTP', () => {
   });
 
   // -- o caminho feliz -------------------------------------------------------
+
+  it('Stripe da assinatura não cobra clientes nem aceita webhook de comanda', async () => {
+    const token = await abrirBarbearia();
+    const orderId = await comandaDe4900(token);
+    const tenantId = await tenantIdDo(DONO.businessName);
+    vi.stubEnv('PSP_MODO', 'stripe');
+    vi.stubEnv('COMANDA_PSP_MODO', 'nenhum');
+    const rede = vi.spyOn(globalThis, 'fetch');
+    const recusa = await com(token)(http().post(`/v1/admin/orders/${orderId}/charges`)
+      .set('Idempotency-Key', 'somente-assinatura').send({ meio: 'cartao' })).expect(503);
+    expect(recusa.body.error.code).toBe('psp_nao_configurado');
+    const evento = comoAStripe(eventoPago(tenantId, orderId, 'pi_externo', 'evt_comanda_externa'));
+    const recebido = await http().post('/v1/webhooks/stripe')
+      .set('stripe-signature', evento.cabecalho)
+      .set('content-type', 'application/json').send(evento.cru).expect(201);
+    expect(recebido.body.desfecho).toBe('ignorado');
+    expect(rede).not.toHaveBeenCalled();
+    const lista = await com(token)(http().get(`/v1/admin/orders/${orderId}/charges`)).expect(200);
+    expect(lista.body.cobrancas).toHaveLength(0);
+    expect((await com(token)(http().get(`/v1/admin/orders/${orderId}`)).expect(200)).body.status).toBe('open');
+  });
 
   it('o QR Code sai na tela e o webhook fecha a comanda', async () => {
     const token = await abrirBarbearia();

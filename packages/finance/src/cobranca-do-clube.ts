@@ -949,6 +949,7 @@ export async function avisarCartoesAVencer(entrada: {
 // ---------------------------------------------------------------------------
 
 export interface AvisoDoClube {
+  readonly customerId: string;
   readonly telefone: string;
   readonly barbearia: string;
   readonly texto: string;
@@ -976,6 +977,7 @@ export async function montarAvisoDoClube(entrada: {
   return withTenant(entrada.tenantId, async (tx) => {
     const [linha] = await tx.$queryRaw<
       {
+        customer_id: string;
         telefone: string | null;
         plano: string | null;
         barbearia: string;
@@ -983,7 +985,7 @@ export async function montarAvisoDoClube(entrada: {
         vencimento: Date | null;
       }[]
     >`
-      SELECT c.phone_e164 AS telefone, p.name AS plano, t.name AS barbearia,
+      SELECT c.id AS customer_id, c.phone_e164 AS telefone, p.name AS plano, t.name AS barbearia,
              s.cancel_effective_at,
              (SELECT min(f.due_at) FROM club_invoices f
                WHERE f.subscription_id = s.id AND f.status = 'aberta') AS vencimento
@@ -1006,6 +1008,6 @@ export async function montarAvisoDoClube(entrada: {
         : {}),
     });
 
-    return { telefone: linha.telefone, barbearia: linha.barbearia, texto };
+    return { customerId: linha.customer_id, telefone: linha.telefone, barbearia: linha.barbearia, texto };
   });
 }

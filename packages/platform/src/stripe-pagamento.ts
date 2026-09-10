@@ -145,7 +145,7 @@ interface Sessao {
 /**
  * A barbearia cobrando o cliente dela.
  *
- * Pix e cartão saem por `PaymentIntent`; link sai por `Checkout Session`, que é
+ * Pix sai por `PaymentIntent`; cartão e link saem por `Checkout Session`, que é
  * uma página hospedada pela Stripe. A escolha não é estética: link é para
  * mandar por WhatsApp a quem não está no balcão, e hospedar essa página nós
  * mesmos significaria receber dado de cartão — o que este produto não faz e não
@@ -156,7 +156,7 @@ export class StripePaymentProvider implements PaymentProvider {
   constructor(private readonly cliente: StripeCliente = new StripeCliente()) {}
 
   async criarCobranca(pedido: PedidoDePagamento): Promise<CobrancaCriada> {
-    if (pedido.meio === 'link') return this.criarLink(pedido);
+    if (pedido.meio === 'link' || pedido.meio === 'cartao') return this.criarLink(pedido);
     return this.criarIntent(pedido);
   }
 
@@ -199,6 +199,10 @@ export class StripePaymentProvider implements PaymentProvider {
       {
         mode: 'payment',
         currency: 'brl',
+        ...(pedido.meio === 'cartao' ? { payment_method_types: ['card'] } : {}),
+        payment_intent_data: {
+          metadata: { order_id: pedido.orderId, tenant_id: pedido.tenantId },
+        },
         /**
          * Obrigatório, e faltava: o link **nunca funcionou**.
          *
@@ -230,6 +234,10 @@ export class StripePaymentProvider implements PaymentProvider {
       },
       { idempotencyKey: chaveDoAdquirente(pedido) },
     );
+
+    if (sessao.payment_status !== 'paid' && !sessao.url) {
+      throw new Error('A Stripe não devolveu a URL do checkout');
+    }
 
     return {
       estado: sessao.payment_status === 'paid' ? 'pago' : 'aguardando',
@@ -344,7 +352,7 @@ export class StripePspProvider implements PspProvider {
           payment_method: pedido.pspMethodId,
           off_session: true,
           confirm: true,
-          metadata: { fatura_id: pedido.faturaId, tenant_id: pedido.tenantId },
+          metadata: { fatura_id: pedido.faturaId, tenant_id: pedido.tenantId, tentativa: String(pedido.tentativa) },
         },
         // A tentativa é parte da chave: dois workers executando **o mesmo**
         // degrau reencontram a mesma cobrança; D+1/D+3/D+7, depois de uma
@@ -352,7 +360,8 @@ export class StripePspProvider implements PspProvider {
         { idempotencyKey: `fatura:${pedido.faturaId}:tentativa:${pedido.tentativa}` },
       );
 
-      return { estado: paraEstadoDaCobranca(intent.status), chargeId: intent.id };
+      const estado = paraEstadoDaCobranca(intent.status, intent.last_payment_error?.code);
+      return { estado: estado === 'recusada' ? await this.consultar(intent.id) : estado, chargeId: intent.id };
     } catch (erro) {
       /**
        * Recusa é resposta, não falha.
@@ -363,15 +372,59 @@ export class StripePspProvider implements PspProvider {
        * que é outra coisa e não deve gastar degrau da escada.
        */
       if (erro instanceof StripeError && erro.status === 402) {
+        if (erro.code === 'authentication_required') {
+          // Conserva o mesmo PaymentIntent para autenticação pelo dono.
+          if (!erro.paymentIntentId) throw erro;
+          return { estado: 'pendente', chargeId: erro.paymentIntentId, motivo: erro.code };
+        }
+        if (erro.paymentIntentId) {
+          return { estado: await this.consultar(erro.paymentIntentId), chargeId: erro.paymentIntentId, motivo: erro.code };
+        }
         return { estado: 'recusada', chargeId: '', motivo: erro.code };
       }
       throw erro;
     }
   }
 
+  async recuperar(pedido: PedidoDeCobranca): Promise<RespostaDaCobranca | null> {
+    // Só identificadores internos validados entram na gramática de busca.
+    if (!/^[a-f0-9-]{36}$/i.test(pedido.faturaId) || !/^[a-f0-9-]{36}$/i.test(pedido.tenantId) ||
+      !Number.isSafeInteger(pedido.tentativa) || pedido.tentativa < 1) throw new Error('cobranca_identidade_invalida');
+    const query = `metadata['fatura_id']:'${pedido.faturaId}' AND metadata['tenant_id']:'${pedido.tenantId}' AND metadata['tentativa']:'${pedido.tentativa}'`;
+    const resultado = await this.cliente.get<{ data: Array<PaymentIntent & {
+      amount: number; currency: string; customer: string; payment_method: string | null; livemode: boolean;
+      metadata: Record<string, string>;
+    }>; has_more: boolean }>(`/payment_intents/search?${new URLSearchParams({ query, limit: '2' })}`);
+    if (!Array.isArray(resultado.data) || resultado.has_more || resultado.data.length > 1) throw new Error('stripe_busca_ambigua');
+    const intent = resultado.data[0];
+    if (!intent) return null; // Busca é eventualmente consistente: vazio nunca libera outro débito.
+    if (!/^pi_[A-Za-z0-9]+$/.test(intent.id) || intent.amount !== pedido.valorCents || intent.currency !== 'brl' ||
+      intent.customer !== pedido.pspCustomerId || (intent.payment_method !== pedido.pspMethodId && intent.status !== 'canceled') ||
+      intent.livemode !== process.env['STRIPE_SECRET_KEY']?.startsWith('sk_live_') ||
+      intent.metadata?.['fatura_id'] !== pedido.faturaId || intent.metadata?.['tenant_id'] !== pedido.tenantId ||
+      intent.metadata?.['tentativa'] !== String(pedido.tentativa)) throw new Error('stripe_tentativa_divergente');
+    return { estado: await this.consultar(intent.id), chargeId: intent.id };
+  }
+
   async consultar(chargeId: string): Promise<EstadoDaCobranca> {
     const intent = await this.cliente.get<PaymentIntent>(`/payment_intents/${noCaminho(chargeId)}`);
-    return paraEstadoDaCobranca(intent.status);
+    if (intent.id !== chargeId) throw new Error('stripe_cobranca_divergente');
+    const estado = paraEstadoDaCobranca(intent.status, intent.last_payment_error?.code);
+    if (estado !== 'recusada' || intent.status === 'canceled') return estado;
+    // O segredo pode já estar no navegador. Antes de liberar nova cobrança,
+    // torna o PI anterior impossível de confirmar, inclusive numa aba antiga.
+    try {
+      const cancelado = await this.cliente.post<PaymentIntent>(`/payment_intents/${noCaminho(chargeId)}/cancel`, {},
+        { idempotencyKey: `fatura-cancelar-recusa:${chargeId}` });
+      if (cancelado.id !== chargeId || cancelado.status !== 'canceled') throw new Error('stripe_cancelamento_nao_confirmado');
+      return 'recusada';
+    } catch (erro) {
+      if (!(erro instanceof StripeError) || erro.status >= 500) throw erro;
+      const atual = await this.cliente.get<PaymentIntent>(`/payment_intents/${noCaminho(chargeId)}`);
+      if (atual.id === chargeId && atual.status === 'succeeded') return 'paga';
+      if (atual.id === chargeId && atual.status === 'canceled') return 'recusada';
+      throw erro;
+    }
   }
 
   /**
@@ -414,7 +467,8 @@ export class StripePspProvider implements PspProvider {
 }
 
 /** O mesmo mapa, na linguagem da cobrança da plataforma (bloco 29). */
-export function paraEstadoDaCobranca(status: string): EstadoDaCobranca {
+export function paraEstadoDaCobranca(status: string, codigoDaFalha?: string): EstadoDaCobranca {
+  if (status === 'requires_payment_method' && codigoDaFalha === 'authentication_required') return 'pendente';
   switch (status) {
     case 'succeeded':
       return 'paga';

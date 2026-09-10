@@ -461,6 +461,7 @@ async function estadoAtual(
 }
 
 export interface RespostaParaEnviar {
+  readonly locationId: string;
   readonly telefone: string;
   readonly clienteNome: string;
   readonly tipo: TipoDeRecado;
@@ -484,6 +485,7 @@ export async function respostaParaEnviar(
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
       {
+        location_id: string;
         kind: TipoDeRecado;
         answer: string | null;
         customer_id: string | null;
@@ -492,7 +494,7 @@ export async function respostaParaEnviar(
         barbearia: string;
       }[]
     >`
-      SELECT f.kind, f.answer, f.customer_id, c.name, c.phone_e164 AS phone,
+      SELECT f.location_id, f.kind, f.answer, f.customer_id, c.name, c.phone_e164 AS phone,
              t.name AS barbearia
         FROM feedbacks f
         JOIN customers c ON c.id = f.customer_id
@@ -502,6 +504,7 @@ export async function respostaParaEnviar(
     const linha = linhas[0];
     if (!linha || !linha.answer || !linha.phone || !linha.customer_id) return null;
     return {
+      locationId: linha.location_id,
       telefone: linha.phone,
       clienteNome: linha.name,
       tipo: linha.kind,

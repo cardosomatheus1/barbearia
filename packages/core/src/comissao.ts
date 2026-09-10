@@ -351,34 +351,38 @@ export function ratearDesconto(params: {
   readonly descontoCents: number;
 }): ReadonlyMap<string, number> {
   const rateio = new Map<string, number>();
-  const total = params.itens.reduce((soma, item) => soma + item.totalCents, 0);
+  if (!Number.isSafeInteger(params.descontoCents) || params.itens.some(i => !Number.isSafeInteger(i.totalCents) || i.totalCents < 0)) {
+    throw new RangeError('O rateio exige centavos inteiros seguros.');
+  }
+  const total = params.itens.reduce((soma, item) => soma + BigInt(item.totalCents), 0n);
 
-  if (params.descontoCents <= 0 || total <= 0) {
+  if (params.descontoCents <= 0 || total <= 0n) {
     for (const item of params.itens) rateio.set(item.id, 0);
     return rateio;
   }
 
   // Desconto maior que o total zeraria a base; não há o que ratear além dele.
-  const desconto = Math.min(params.descontoCents, total);
+  const solicitado = BigInt(params.descontoCents);
+  const desconto = solicitado < total ? solicitado : total;
 
-  const restos: { id: string; resto: number; valor: number }[] = [];
-  let distribuido = 0;
+  const restos: { id: string; resto: bigint; valor: number }[] = [];
+  let distribuido = 0n;
 
   for (const item of params.itens) {
-    const exato = (item.totalCents * desconto) / total;
-    const piso = Math.floor(exato);
-    rateio.set(item.id, piso);
+    const produto = BigInt(item.totalCents) * desconto;
+    const piso = produto / total;
+    rateio.set(item.id, Number(piso));
     distribuido += piso;
-    restos.push({ id: item.id, resto: exato - piso, valor: item.totalCents });
+    restos.push({ id: item.id, resto: produto % total, valor: item.totalCents });
   }
 
-  restos.sort((a, b) => b.resto - a.resto || b.valor - a.valor || (a.id < b.id ? -1 : 1));
+  restos.sort((a, b) => (a.resto === b.resto ? b.valor - a.valor || (a.id < b.id ? -1 : 1) : a.resto > b.resto ? -1 : 1));
 
   let sobra = desconto - distribuido;
   for (const { id } of restos) {
-    if (sobra <= 0) break;
+    if (sobra <= 0n) break;
     rateio.set(id, (rateio.get(id) ?? 0) + 1);
-    sobra -= 1;
+    sobra -= 1n;
   }
 
   return rateio;

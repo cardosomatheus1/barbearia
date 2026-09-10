@@ -82,9 +82,9 @@ for (const [nome, fonte] of [
   exigir(!new RegExp(`export\\s+(?:async\\s+)?function\\s+${nome}\\s*\\(`).test(fachada), `${nome} voltou para a fachada`);
 }
 
-// Honestidade da integração: só existem nenhum/fake, padrão é desligado e
-// qualquer nome de emissor não implementado falha alto.
-exigir(emissor.includes("export type ModoFiscal = 'nenhum' | 'fake'"), 'catálogo fiscal passou a prometer emissor não implementado');
+// Emissor nacional próprio, padrão desligado e fake vedado em produção.
+exigir(emissor.includes("export type ModoFiscal = 'nenhum' | 'fake' | 'nacional'"), 'catálogo fiscal não corresponde às implementações');
+exigir(emissor.includes('new EmissorNacionalNfse()') && emissor.includes('chaveFiscal()'), 'emissor nacional perdeu ligação ou cofre obrigatório');
 exigir(emissor.includes("if (bruto === undefined || bruto === '') return 'nenhum'"), 'fiscal deixou de iniciar desligado por padrão');
 exigir(emissor.includes("if (bruto === 'nenhum' || bruto === 'fake') return modoSeguroParaOAmbiente(bruto)"), 'modo fiscal deixou de aceitar apenas os modos implementados');
 exigir(emissor.includes('FISCAL_MODO inválido'), 'modo fiscal desconhecido deixou de falhar alto');

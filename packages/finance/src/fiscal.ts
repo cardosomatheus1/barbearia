@@ -15,3 +15,8 @@ export * from './fiscal-emissao.js';
 export * from './fiscal-entrega.js';
 
 export { chaveDaNota } from '@barbearia/core';
+export { NfseError } from './nfse/erros.js';
+export { situacaoNfse, salvarConfiguracaoNfse, salvarCertificadoNfse, removerCertificadoNfse } from './nfse/configuracao.js';
+export type { ConfiguracaoNfse } from './nfse/configuracao.js';
+export { baixarXmlNfse } from './nfse/documentos.js';
+export { prepararPdfsNfse, baixarPdfNfse, pdfPeloLinkNfse } from './nfse/pdf.js';

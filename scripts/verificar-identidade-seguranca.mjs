@@ -56,7 +56,11 @@ export function falhasDaIdentidade(fontes = {}) {
   for (const [nome, fonte] of [['.env.example', env], ['deploy/compose.yml', compose], ['deploy/segredos.sh', segredos]]) {
     if (!fonte.includes('OTP_PEPPER')) falhas.push(`${nome} não provisiona OTP_PEPPER`);
   }
-  if (!preflight.includes("['STAFF_EMAIL_PEPPER', 'OTP_PEPPER', 'API_KEY_PEPPER']")) {
+  // Novos segredos podem compartilhar a mesma validação. Conferir a lista
+  // inteira como string recusava acrescentar INTERNAL_PROXY_SECRET.
+  const listasValidadas = [...preflight.matchAll(/for\s*\(const nome of \[([^\]]+)\]\)\s*\{\s*const segredo = valor\(env, nome\);\s*if \(segredo.length < 32\)/g)]
+    .flatMap((m) => [...m[1].matchAll(/['"]([A-Z_]+)['"]/g)].map((n) => n[1]));
+  if (['STAFF_EMAIL_PEPPER', 'OTP_PEPPER', 'API_KEY_PEPPER'].some((nome) => !listasValidadas.includes(nome))) {
     falhas.push('preflight de produção não exige peppers fortes de identidade');
   }
 

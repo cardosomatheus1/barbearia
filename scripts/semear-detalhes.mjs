@@ -1148,7 +1148,13 @@ function vitrineEPerfil({ tenant, local, cadeiras, slug }) {
            now()
       FROM locations l JOIN tenants t ON t.id = l.tenant_id
      WHERE l.id = ${lit(local)}
-    ON CONFLICT (location_id) DO UPDATE SET refreshed_at = now();
+    -- A publicação já criou a linha antes de semear avaliações. Atualizar só
+    -- o carimbo conservava nota nula e fazia a vitrine divergir da página.
+    ON CONFLICT (location_id) DO UPDATE SET
+      rating_bps = EXCLUDED.rating_bps, rating_count = EXCLUDED.rating_count,
+      price_from_cents = EXCLUDED.price_from_cents,
+      price_from_service_id = EXCLUDED.price_from_service_id,
+      has_club = EXCLUDED.has_club, refreshed_at = now();
 
     UPDATE locations SET listed_in_marketplace = true WHERE id = ${lit(local)};`;
 

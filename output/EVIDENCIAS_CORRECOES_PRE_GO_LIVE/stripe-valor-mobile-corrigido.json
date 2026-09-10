@@ -1,0 +1,10 @@
+{
+  "name": "stripe-valor-mobile-corrigido",
+  "command": [
+    "python3",
+    "output/prova_stripe_navegador.py"
+  ],
+  "started_utc": "2026-09-10T07:49:07.031832+00:00",
+  "duration_seconds": 13.84,
+  "exit_code": 0
+}

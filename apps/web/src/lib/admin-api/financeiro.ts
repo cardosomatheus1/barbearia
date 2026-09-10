@@ -361,6 +361,8 @@ export interface NotaNaTela {
   numero: string | null;
   linkPdf: string | null;
   motivoDaRecusa: string | null;
+  xmlDisponivel?: boolean;
+  avisoOperacional?: string | null;
   regime: RegimeFiscal;
   servicoCents: number;
   /** Só chega para quem tem `commission.view_all`: é a comissão daquela venda. */
@@ -431,5 +433,4 @@ export const emitirNotaNaApi = (token: string, orderId: string) =>
   chamar<{ id: string | null }>('POST', `/v1/admin/fiscal/notas/comanda/${orderId}`, {}, token);
 
 export const cancelarNotaNaApi = (token: string, notaId: string, motivo: string) =>
-  chamar<{ ok: true }>('POST', `/v1/admin/fiscal/notas/${notaId}/cancelar`, { motivo }, token);
-
+  chamar<{ ok: true; estado?: 'cancelando' | 'cancelada' }>('POST', `/v1/admin/fiscal/notas/${notaId}/cancelar`, { motivo }, token);

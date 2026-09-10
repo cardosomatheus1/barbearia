@@ -1,22 +1,13 @@
-import { FakeSplitProvider, type SplitProvider } from '@barbearia/core';
+import { FakeCobrancaDoClubeProvider, type CobrancaDoClubeProvider, FakeSplitProvider, type SplitProvider } from '@barbearia/core';
 import { FakePaymentProvider, type PaymentProvider } from '@barbearia/core';
 import { FakePspProvider, type PspProvider } from './psp.js';
 import { StripeCliente } from './stripe.js';
-import { StripePaymentProvider, StripePspProvider } from './stripe-pagamento.js';
+import { StripePspProvider } from './stripe-pagamento.js';
 
 /**
- * Quem decide qual adquirente está no ar (bloco 34).
- *
- * ## Por que uma função só, e não um `new` em cada processo
- *
- * O produto tem dois processos que cobram — a API (estorno de crédito, e a
- * partir do bloco 35 a comanda) e o worker (a régua da assinatura). Cada um
- * escolhendo o seu provedor significa que ligar a Stripe é lembrar de dois
- * lugares, e o que acontece de verdade é ligar num e esquecer no outro: a régua
- * debitando de verdade enquanto o estorno devolve dinheiro de mentira.
- *
- * Esta é a **única** função do produto que sabe que a Stripe existe. Tudo o
- * mais fala com `PspProvider` e `PaymentProvider`.
+ * Configuração compartilhada pela API e pelo worker.
+ * PSP_MODO controla somente a plataforma cobrando a assinatura da barbearia.
+ * A conta Stripe do SaaS nunca recebe pagamentos dos clientes das lojas.
  *
  * ## Por que o padrão é não ter adquirente
  *
@@ -74,40 +65,52 @@ export function adquirenteDaPlataforma(modo = modoDoAdquirente()): PspProvider |
   }
 }
 
-/**
- * O adquirente da **barbearia cobrando o cliente dela**.
- *
- * Nunca `null`, e a diferença em relação ao de cima é o que acontece sem
- * adquirente: lá a plataforma simplesmente não debita, aqui o balcão precisa de
- * uma resposta na tela. O fake devolve um Pix que não existe, que é honesto em
- * desenvolvimento e impossível de confundir com dinheiro de verdade — o
- * copia-e-cola sai literalmente com `fake` no meio.
- */
+/** Comanda tem configuração própria e nenhum gateway real nesta versão. */
+export type ModoDaComanda = 'nenhum' | 'fake';
 
-/** Cobrança da comanda só existe quando o modo foi escolhido explicitamente. */
-export function cobrancaDaComandaDisponivel(modo = modoDoAdquirente()): boolean {
-  const seguro = modoSeguroParaOAmbiente(modo);
-  return seguro === 'fake' || seguro === 'stripe';
+export function modoDaComanda(bruto = process.env['COMANDA_PSP_MODO']): ModoDaComanda {
+  if (bruto === undefined || bruto === '' || bruto === 'nenhum') return 'nenhum';
+  if (bruto === 'fake') {
+    if (process.env['NODE_ENV'] === 'production') {
+      throw new Error('COMANDA_PSP_MODO=fake não pode ser usado em produção');
+    }
+    return 'fake';
+  }
+  throw new Error('COMANDA_PSP_MODO inválido. Use nenhum ou fake em teste; Stripe é exclusiva da assinatura do SaaS.');
 }
 
-export function adquirenteDaComanda(modo = modoDoAdquirente()): PaymentProvider {
-  const seguro = modoSeguroParaOAmbiente(modo);
-  return seguro === 'stripe'
-    ? new StripePaymentProvider(new StripeCliente())
-    : new FakePaymentProvider();
+export function cobrancaDaComandaDisponivel(modo = modoDaComanda()): boolean {
+  return modoDaComanda(modo) === 'fake';
 }
 
-/**
- * O adquirente do **split** (bloco 50).
- *
- * Aqui pela mesma razão dos outros três: quem escolhe implementação é quem monta
- * o processo, e `packages/platform` é onde as credenciais e o cliente HTTP já
- * moram. Hoje devolve o de mentira — não há conta contratada, e é lacuna
- * declarada — e a escolha do fake é o que faz o caminho real ser exercido: sem
- * cadastro aprovado a parte fica retida, e a comissão sai no fechamento.
- */
-let doSplit: SplitProvider | null = null;
+// A ausência de integração não pode fabricar uma confirmação de estorno.
+// O erro preserva a operação pendente para tratamento pelo operador.
+const comandaSemAdquirente: PaymentProvider = {
+  async criarCobranca() { throw new Error('comanda_sem_adquirente'); },
+  async consultar() { throw new Error('comanda_sem_adquirente'); },
+  async cancelar() { throw new Error('comanda_sem_adquirente'); },
+  async estornar() { throw new Error('comanda_sem_adquirente'); },
+};
 
+export function adquirenteDaComanda(modo = modoDaComanda()): PaymentProvider {
+  return modoDaComanda(modo) === 'fake' ? new FakePaymentProvider() : comandaSemAdquirente;
+}
+
+/** A conta Stripe do SaaS não processa recebíveis nem assinaturas das lojas. */
+const splitSemAdquirente: SplitProvider = {
+  async cadastrarRecebedor() { throw new Error('split_sem_adquirente'); },
+  async consultarRecebedor() { throw new Error('split_sem_adquirente'); },
+  async transferir() { throw new Error('split_sem_adquirente'); },
+};
+const clubeSemAdquirente: CobrancaDoClubeProvider = {
+  async cobrar() { throw new Error('clube_sem_adquirente'); },
+};
+let splitFake: SplitProvider | null = null;
+let clubeFake: CobrancaDoClubeProvider | null = null;
+export function splitDisponivel(): boolean { return modoDaComanda() === 'fake'; }
 export function adquirenteDoSplit(): SplitProvider {
-  return (doSplit ??= new FakeSplitProvider());
+  return splitDisponivel() ? (splitFake ??= new FakeSplitProvider()) : splitSemAdquirente;
+}
+export function adquirenteDoClube(): CobrancaDoClubeProvider {
+  return modoDaComanda() === 'fake' ? (clubeFake ??= new FakeCobrancaDoClubeProvider()) : clubeSemAdquirente;
 }

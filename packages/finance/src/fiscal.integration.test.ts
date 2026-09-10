@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { FakeFiscalProvider, type ConfiguracaoFiscal } from '@barbearia/core';
+import { FakeFiscalProvider, WhatsAppDeliveryUnknownError, type ConfiguracaoFiscal } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
 import { abrirCaixa } from './caixa.js';
 import { abrirComanda, adicionarItem, fecharComanda } from './comanda.js';
@@ -693,50 +693,27 @@ describeIfDb('fiscal', () => {
     expect(resultado.enviadas).toBe(0);
   });
 
-  it('mensagem que falha não é repetida na volta seguinte', async () => {
-    /**
-     * O carimbo é gravado **antes** de a mensagem sair, e é a decisão que este
-     * teste prende. A alternativa — mandar e depois carimbar — perde o carimbo
-     * se o processo cair no meio, e a volta seguinte remanda a mesma nota.
-     *
-     * Entre repetir e não mandar, o produto escolhe não mandar: o link continua
-     * na comanda e a recepção manda quando o cliente pedir. A escolha inversa
-     * transforma uma queda do worker em vinte mensagens iguais no celular do
-     * cliente, pelo mesmo número que manda o lembrete que reduz falta.
-     *
-     * Provado com o provedor falhando, e não com duas voltas simultâneas: a
-     * corrida entre duas transações não é determinística, e um teste que passa
-     * com e sem o conserto não prova nada.
-     */
-    await cadastrar();
-    const orderId = await venderCorte();
-    await autorizar(orderId, new FakeFiscalProvider());
-
+  it('falha conhecida permite nova tentativa e não registra nota como entregue', async () => {
+    await cadastrar(); const orderId = await venderCorte(); await autorizar(orderId, new FakeFiscalProvider());
     const agora = new Date('2026-11-25T17:00:00Z');
-    await expect(
-      entregarNotasAutorizadas({
-        tenantId: TENANT,
-        agora,
-        enviar: async () => {
-          throw new Error('provedor fora do ar');
-        },
-      }),
-    ).rejects.toThrow('provedor fora do ar');
-
-    const segunda = await entregarNotasAutorizadas({
-      tenantId: TENANT,
-      agora,
-      enviar: async () => {
-        throw new Error('não deveria tentar de novo');
-      },
-    });
+    await expect(entregarNotasAutorizadas({ tenantId: TENANT, agora,
+      enviar: async () => { throw new Error('provedor fora do ar antes de transmitir'); } })).rejects.toThrow('provedor fora do ar');
+    const [antes] = await admin.$queryRaw<{ customer_notified_at: Date | null }[]>`SELECT customer_notified_at FROM fiscal_invoices WHERE order_id=${orderId}::uuid`;
+    expect(antes?.customer_notified_at).toBeNull();
+    expect((await entregarNotasAutorizadas({ tenantId: TENANT, agora, enviar: async () => undefined })).enviadas).toBe(1);
+    expect((await entregarNotasAutorizadas({ tenantId: TENANT, agora, enviar: async () => { throw new Error('duplicou'); } })).enviadas).toBe(0);
+  });
+  it('resultado incerto mantém nota pendente de confirmação e não reenvia', async () => {
+    await cadastrar(); const orderId = await venderCorte(); await autorizar(orderId, new FakeFiscalProvider());
+    const agora = new Date('2026-11-25T17:00:00Z');
+    const primeira = await entregarNotasAutorizadas({ tenantId: TENANT, agora,
+      enviar: async () => { throw new WhatsAppDeliveryUnknownError(); } });
+    expect(primeira).toEqual({ enviadas: 0, adiadas: 1 });
+    const segunda = await entregarNotasAutorizadas({ tenantId: TENANT, agora,
+      enviar: async () => { throw new Error('não deveria transmitir outra mensagem'); } });
     expect(segunda.enviadas).toBe(0);
-
-    const nota = await notaDaVenda(TENANT, LOCATION, orderId);
-    const carimbo = await admin.$queryRawUnsafe<{ customer_notified_at: Date | null }[]>(
-      `SELECT customer_notified_at FROM fiscal_invoices WHERE id = '${nota!.id}'`,
-    );
-    expect(carimbo[0]?.customer_notified_at).not.toBeNull();
+    const [nota] = await admin.$queryRaw<{ customer_notified_at: Date | null }[]>`SELECT customer_notified_at FROM fiscal_invoices WHERE order_id=${orderId}::uuid`;
+    expect(nota?.customer_notified_at).toBeNull();
   });
 
   // -------------------------------------------------------------------------

@@ -102,21 +102,10 @@ antes_politicas=$(psql "$ALVO" -tAc "SELECT count(*) FROM pg_policies WHERE sche
 # marcador escolhido a dedo prova o que quem escreveu já achava; a assinatura
 # prova que o banco voltou, seja qual for a migração da vez.
 assinatura() {
-  psql "$1" -tAc "
-    SELECT md5(string_agg(linha, E'\n' ORDER BY linha)) FROM (
-      SELECT table_name || '.' || column_name || ':' || data_type AS linha
-        FROM information_schema.columns WHERE table_schema = 'public'
-      UNION ALL
-      SELECT 'fn:' || p.proname || ':' || md5(coalesce(p.prosrc, ''))
-        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-       WHERE n.nspname = 'public'
-      UNION ALL
-      SELECT 'ct:' || c.conname || ':' || pg_get_constraintdef(c.oid)
-        FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
-       WHERE n.nspname = 'public'
-    ) t"
+  node packages/db/scripts/check-schema.mjs signature "$1"
 }
 antes_assinatura=$(assinatura "$ALVO")
+antes_dados=$(node packages/db/scripts/check-schema.mjs data-signature "$ALVO")
 
 # -- 2. a migração -------------------------------------------------------------
 
@@ -125,6 +114,7 @@ inicio=$(date +%s%N)
 psql "$ALVO" -q -v ON_ERROR_STOP=1 -f "$ULTIMA" >/dev/null
 migracao_ms=$(( ($(date +%s%N) - inicio) / 1000000 ))
 depois_assinatura=$(assinatura "$ALVO")
+depois_dados=$(node packages/db/scripts/check-schema.mjs data-signature "$ALVO")
 printf '    %s ms\n' "$migracao_ms"
 
 # -- 3. a volta ----------------------------------------------------------------
@@ -133,7 +123,7 @@ titulo "a migração quebrou: restaurar o backup"
 inicio=$(date +%s%N)
 psql "$ADMIN" -q -c "DROP DATABASE IF EXISTS $DB WITH (FORCE);" >/dev/null
 psql "$ADMIN" -q -v ON_ERROR_STOP=1 -c "CREATE DATABASE $DB;"
-pg_restore --dbname="$ALVO" --no-owner --no-privileges "$DUMP" >/dev/null 2>&1
+pg_restore --dbname="$ALVO" --no-owner "$DUMP" >/dev/null 2>&1
 restauracao_ms=$(( ($(date +%s%N) - inicio) / 1000000 ))
 printf '    %s ms\n' "$restauracao_ms"
 
@@ -157,13 +147,18 @@ conferir "clientes" "$antes_clientes" "$(psql "$ALVO" -tAc 'SELECT count(*) FROM
 conferir "políticas de RLS" "$antes_politicas" \
   "$(psql "$ALVO" -tAc "SELECT count(*) FROM pg_policies WHERE schemaname='public'")"
 
+if ! node packages/db/scripts/check-schema.mjs app "$ALVO"; then
+  vermelho "    ✗   o role da aplicação não consegue usar o banco restaurado"
+  problemas=$((problemas + 1))
+fi
+
 # A migração precisa ter mudado alguma coisa, senão o ensaio é vacuoso: ele
 # "provaria" que restaurar um banco idêntico devolve um banco idêntico.
-if [ "$antes_assinatura" = "$depois_assinatura" ]; then
-  vermelho "    ✗   a migração não mudou o schema: este ensaio não prova nada"
+if [ "$antes_assinatura" = "$depois_assinatura" ] && [ "$antes_dados" = "$depois_dados" ]; then
+  vermelho "    ✗   a migração não mudou estrutura nem dados: este ensaio não prova nada"
   problemas=$((problemas + 1))
 else
-  verde "    ok  a migração mudou o schema (é o que se desfaz)"
+  verde "    ok  a migração mudou estrutura ou dados (é o que se desfaz)"
 fi
 
 restaurada=$(assinatura "$ALVO")
@@ -173,16 +168,18 @@ else
   vermelho "    ✗   o schema restaurado não é o de antes: restaurou o banco errado"
   problemas=$((problemas + 1))
 fi
+conferir "conteúdo de todas as tabelas" "$antes_dados" \
+  "$(node packages/db/scripts/check-schema.mjs data-signature "$ALVO")"
 
 # -- 5. o resumo ---------------------------------------------------------------
 
 titulo "resumo"
 printf '    backup      %6s ms\n' "$backup_ms"
 printf '    migração    %6s ms\n' "$migracao_ms"
-printf '    restauração %6s ms   ← a indisponibilidade real\n' "$restauracao_ms"
+printf '    restauração %6s ms   ← tempo de restauração neste ensaio\n' "$restauracao_ms"
 
 if [ "$problemas" -gt 0 ]; then
   vermelho "ensaio de rollback: $problemas problema(s)."
   exit 1
 fi
-verde "ensaio de rollback: a volta funciona, e leva $(( restauracao_ms / 1000 ))s."
+verde "ensaio de rollback: a restauração local funciona, e leva $(( restauracao_ms / 1000 ))s."

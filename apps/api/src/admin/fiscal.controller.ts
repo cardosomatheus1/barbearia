@@ -10,6 +10,8 @@ import {
   salvarDocumentoDoCliente,
   tomadorDaVenda,
   emissorFiscal,
+  NfseError,
+  modoFiscal,
 } from '@barbearia/finance';
 import { pode, type FiscalProvider, type RegimeFiscal } from '@barbearia/core';
 import { withTenant } from '@barbearia/db';
@@ -72,6 +74,7 @@ const STATUS: Record<string, number> = {
 };
 
 function toHttp(erro: unknown): never {
+  if (erro instanceof NfseError) throw new DomainError(erro.code, erro.status, erro.message);
   if (erro instanceof FiscalError) {
     throw new DomainError(erro.code, STATUS[erro.code] ?? 400, erro.message, erro.motivo);
   }
@@ -344,8 +347,9 @@ export class FiscalController {
         provider: exigirEmissor(),
         staffId: staff.staffUserId,
         staffName: staff.name,
+        enfileirar: modoFiscal() === 'nacional',
       });
-      return { ok: true };
+      return { ok: true, estado: modoFiscal() === 'nacional' ? 'cancelando' : 'cancelada' };
     } catch (erro) {
       return toHttp(erro);
     }

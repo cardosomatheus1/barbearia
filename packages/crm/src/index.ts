@@ -12,6 +12,10 @@ export * from './recepcao.js';
 export * from './segmento.js';
 export * from './whatsapp.js';
 export * from './whatsapp-meta.js';
+export * from './baileys/sessao.js';
+export * from './baileys/textos.js';
+export * from './baileys/runtime.js';
+export * from './baileys/outbox.js';
 export * from './whatsapp-signup.js';
 export * from './automacao.js';
 export * from './campanha.js';
@@ -19,3 +23,11 @@ export * from './fotos.js';
 export * from './mensagem-avulsa.js';
 
 export * from './clientes.js';
+
+export * from './whatsapp-canal.js';
+
+export * from './baileys/conciliacao.js';
+
+export * from './baileys/retencao.js';
+
+export * from './automacao-despacho.js';

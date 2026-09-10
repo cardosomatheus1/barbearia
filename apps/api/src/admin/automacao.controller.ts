@@ -118,7 +118,7 @@ export class AutomacaoController {
   ) {
     try {
       return await salvarAutomacao({
-        tenantId: staff.tenantId,
+        tenantId: staff.tenantId, locationId: (await unidadeDoBalcao(staff)).id,
         ...(body.id ? { id: body.id } : {}),
         nome: body.nome,
         gatilho: body.gatilho,

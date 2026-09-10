@@ -46,6 +46,8 @@ export async function agendarOfertaDaVaga(
     readonly fim: Date;
     readonly timezone: string;
     readonly agora: Date;
+    /** Uma nova rodada da mesma vaga depois que este convite venceu. */
+    readonly aposOfertaId?: string;
   },
 ): Promise<void> {
   await enfileirar(tx, {
@@ -57,7 +59,7 @@ export async function agendarOfertaDaVaga(
       fim: params.fim.toISOString(),
     },
     rodarApos: foraDoSilencio(params.agora, params.timezone),
-    idempotencyKey: `oferta:${params.professionalId}:${params.inicio.toISOString()}`,
+    idempotencyKey: `oferta:${params.professionalId}:${params.inicio.toISOString()}${params.aposOfertaId ? `:apos:${params.aposOfertaId}` : ''}`,
     // Duas tentativas. Oferecer uma vaga é útil por minutos: insistir cinco
     // vezes com espera crescente entregaria o convite depois de o horário já
     // ter passado.

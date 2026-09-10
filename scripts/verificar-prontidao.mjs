@@ -152,7 +152,7 @@ const regras = [
     positivos: [
       /\bsplit\b[^\n]{0,80}\b(?:est[aá]\s+)?pront[oa]\b/i,
       /\bsplit\b[^\n]{0,80}\bem produ[cç][aã]o\b/i,
-      /\bsplit\b[^\n]{0,80}\bintegra[cç][aã]o real\b/i,
+      /\bsplit\b[^\n]{0,80}\bintegra[cç][aã]o real\b(?![ \t]+(?:ausente|pendente)\b)/i,
     ],
   },
   {
@@ -161,7 +161,7 @@ const regras = [
     positivos: [
       /NFS-e[^\n]{0,80}\b(?:est[aá]\s+)?pront[oa]\b/i,
       /NFS-e[^\n]{0,80}\bem produ[cç][aã]o\b/i,
-      /NFS-e[^\n]{0,80}\bintegra[cç][aã]o real\b/i,
+      /NFS-e[^\n]{0,80}\bintegra[cç][aã]o real\b(?![ \t]+(?:ausente|pendente)\b)/i,
     ],
   },
   {

@@ -50,13 +50,14 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 function politica(nonce: string, pathname: string): string {
   const turnstile = pathname === '/admin/criar-conta';
+  const stripe = pathname === '/admin/plano';
   return [
     "default-src 'self'",
     // `strict-dynamic` permite que o script do Turnstile, autenticado pelo mesmo
     // nonce do Next, carregue os pedaços próprios sem abrir terceiros no resto do site.
     turnstile
       ? `script-src 'self' https://challenges.cloudflare.com 'nonce-${nonce}' 'strict-dynamic'`
-      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+      : `script-src 'self' ${stripe ? 'https://js.stripe.com ' : ''}'nonce-${nonce}' 'strict-dynamic'`,
     // O produto tem seis `style={{...}}` que desenham barra de progresso a
     // partir de um número calculado no servidor. Atributo de estilo não executa
     // nada; fechá-lo custaria seis classes geradas e não fecharia buraco algum.
@@ -64,9 +65,9 @@ function politica(nonce: string, pathname: string): string {
     "img-src 'self' data: https:",
     // A página fala com a API **pelo servidor**. Nada sai do navegador, e desde
     // o bloco 86 não há exceção: a conexão do WhatsApp virou redirecionamento.
-    turnstile ? "connect-src 'self' https://challenges.cloudflare.com" : "connect-src 'self'",
+    turnstile ? "connect-src 'self' https://challenges.cloudflare.com" : stripe ? "connect-src 'self' https://api.stripe.com https://js.stripe.com https://hooks.stripe.com https://m.stripe.network https://m.stripe.com https://r.stripe.com" : "connect-src 'self'",
     "font-src 'self'",
-    turnstile ? "frame-src https://challenges.cloudflare.com" : "frame-src 'self'",
+    turnstile ? "frame-src https://challenges.cloudflare.com" : stripe ? "frame-src https://js.stripe.com https://hooks.stripe.com" : "frame-src 'self'",
     "object-src 'none'",
     // Sem isto, uma injeção de `<base>` reescreve para onde todo link relativo
     // aponta — inclusive o `action` dos formulários do painel.

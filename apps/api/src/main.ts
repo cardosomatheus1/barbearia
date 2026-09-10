@@ -54,8 +54,8 @@ async function bootstrap(): Promise<void> {
    */
   app.useBodyParser('json', { limit: TETO_DO_ARQUIVO, verify: guardarCorpoCru });
 
-  // A API fica atrás de proxy; sem isso o rate limit enxerga um IP só.
-  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  // A origem é validada por proxyConfiavel; X-Forwarded-For anônimo não é confiável.
+  app.getHttpAdapter().getInstance().set('trust proxy', false);
 
   /**
    * E, pela mesma razão de estar atrás de proxy, a conexão ociosa precisa viver

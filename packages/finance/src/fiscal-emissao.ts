@@ -6,6 +6,8 @@ import {
   type FiscalProvider,
 } from '@barbearia/core';
 import { audit } from '@barbearia/identity';
+import { enfileirarPara } from '@barbearia/jobs';
+import { randomUUID } from 'node:crypto';
 import { recusar } from './fiscal-erros.js';
 
 export async function enviarNota(params: {
@@ -169,12 +171,15 @@ export async function gravarResposta(params: {
     readonly numero: string | null;
     readonly linkPdf: string | null;
     readonly motivoDaRecusa: string | null;
+    readonly cancelamentoRecusado?: boolean;
   };
 }): Promise<EstadoDaNota> {
   return withTenant(params.tenantId, async (tx) => {
     const autorizada = params.resposta.estado === 'autorizada';
     const cancelamentoConcluido =
       params.estadoEsperado === 'cancelando' && params.resposta.estado === 'cancelada';
+    const cancelamentoRecusado = params.estadoEsperado === 'cancelando' &&
+      params.resposta.estado === 'autorizada' && params.resposta.cancelamentoRecusado === true;
 
     const linhas = await tx.$queryRaw<{ status: EstadoDaNota }[]>`
       UPDATE fiscal_invoices
@@ -182,7 +187,7 @@ export async function gravarResposta(params: {
                -- Uma consulta que começou enquanto a nota estava em cancelando
                -- não pode reabrir o documento com uma resposta autorizada
                -- atrasada. Durante o cancelamento só cancelada é avanço.
-               WHEN ${params.estadoEsperado} = 'cancelando' AND NOT ${cancelamentoConcluido}
+               WHEN ${params.estadoEsperado} = 'cancelando' AND NOT ${cancelamentoConcluido} AND NOT ${cancelamentoRecusado}
                  THEN status
                ELSE ${params.resposta.estado}::fiscal_invoice_status
              END,
@@ -190,7 +195,7 @@ export async function gravarResposta(params: {
              number = COALESCE(${params.resposta.numero}, number),
              pdf_url = COALESCE(${params.resposta.linkPdf}, pdf_url),
              rejection_reason = CASE
-               WHEN ${params.estadoEsperado} = 'cancelando' AND NOT ${cancelamentoConcluido}
+               WHEN ${params.estadoEsperado} = 'cancelando' AND NOT ${cancelamentoConcluido} AND NOT ${cancelamentoRecusado}
                  THEN rejection_reason
                ELSE ${params.resposta.motivoDaRecusa}
              END,
@@ -314,9 +319,12 @@ export async function cancelarNota(params: {
   readonly provider: FiscalProvider;
   readonly staffId: string;
   readonly staffName: string;
+  /** A API persiste a intenção; o worker faz a chamada externa. */
+  readonly enfileirar?: boolean;
 }): Promise<void> {
   const motivo = params.motivo.trim();
   if (motivo.length < 3) recusar('motivo_obrigatorio');
+  params.provider.validarMotivoDeCancelamento?.(motivo);
 
   /**
    * O estado **em voo** vem antes da chamada, e é a lição do bloco 50.
@@ -343,12 +351,24 @@ export async function cancelarNota(params: {
     if (nota.status !== 'autorizada') recusar('nota_nao_cancelavel');
 
     const tomadas = await tx.$executeRaw`
-      UPDATE fiscal_invoices SET status = 'cancelando'
+      UPDATE fiscal_invoices SET status = 'cancelando', cancel_reason = ${motivo}
        WHERE id = ${params.invoiceId}::uuid AND status = 'autorizada'
     `;
     if (tomadas !== 1) recusar('nota_nao_cancelavel');
+    await audit(tx, { actorId: params.staffId, actorName: params.staffName,
+      action: 'fiscal.cancellation_requested', entity: 'fiscal_invoice', entityId: params.invoiceId });
+    if (params.enfileirar) {
+      await tx.$executeRaw`
+        UPDATE fiscal_native_documents SET cancel_request_cipher = NULL, cancel_error_code = NULL
+         WHERE invoice_id = ${params.invoiceId}::uuid AND cancel_error_code IS NOT NULL
+      `;
+      await enfileirarPara(tx, params.tenantId, { kind: 'fiscal.emitir', payload: { invoiceId: params.invoiceId },
+        idempotencyKey: `fiscal-cancelar:${params.invoiceId}:${randomUUID()}` });
+    }
     return nota;
   });
+
+  if (params.enfileirar) return;
 
   try {
     if (alvo.provider_invoice_id) {

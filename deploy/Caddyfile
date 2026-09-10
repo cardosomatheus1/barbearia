@@ -25,6 +25,18 @@
 	# Onde o Let's Encrypt avisa que algo deu errado com o certificado. É o
 	# único endereço de e-mail deste arquivo, e é o do dono do domínio.
 	email {$ACME_EMAIL}
+	# Erros de reverse_proxy incluem a requisição no log do processo, separado
+	# do acesso. Proteger ambos também quando o upstream estiver indisponível.
+	log default {
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				resp_headers delete
+			}
+		}
+	}
 }
 
 # O `www` existe e **redireciona**, em vez de servir a mesma coisa.
@@ -38,6 +50,11 @@
 # Ele fica aqui mesmo sem o registro de DNS: sem o registro, ninguém chega e o
 # bloco é inerte. Com o registro e sem o bloco, quem digita `www` recebe erro de
 # certificado — que é o pior dos três desfechos, porque parece golpe.
+(origem_confiavel) {
+    header_up X-Barberdock-Proxy-Key {$INTERNAL_PROXY_SECRET}
+    header_up X-Barberdock-Client-IP {remote_host}
+}
+
 www.{$DOMINIO} {
 	redir https://{$DOMINIO}{uri} permanent
 }
@@ -51,16 +68,22 @@ www.{$DOMINIO} {
 	# Imagens públicas hospedadas pelo próprio Barberdock. O caminho é
 	# imutável (UUID), então pode ir direto à API e aproveitar cache longo.
 	handle /media/* {
-		reverse_proxy api:3000
+		reverse_proxy api:3000 {
+            import origem_confiavel
+        }
 	}
 
 	handle_path /api/* {
-		reverse_proxy api:3000
+		reverse_proxy api:3000 {
+            import origem_confiavel
+        }
 	}
 
 	# Todo o resto é o site, que faz SSR e fala com a API por dentro.
 	handle {
-		reverse_proxy web:3001
+		reverse_proxy web:3001 {
+            import origem_confiavel
+        }
 	}
 
 	# Os cabeçalhos de segurança saem da aplicação (bloco 81) — CSP com nonce
@@ -77,6 +100,17 @@ www.{$DOMINIO} {
 		output file /var/log/caddy/acesso.log {
 			roll_size 20mb
 			roll_keep 5
+		}
+		# Links fiscais, fila/ofertas e consultas podem carregar credenciais.
+		# A API registra o padrão da rota; o proxy guarda só metadados de acesso,
+		# sem URI ou headers, inclusive de rotas futuras e URLs codificadas.
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers delete
+				resp_headers delete
+			}
 		}
 	}
 }

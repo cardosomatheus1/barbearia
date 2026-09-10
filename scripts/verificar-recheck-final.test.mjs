@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 
 const raiz = process.cwd();
 const arquivos = [
+  'scripts/head-auditado.mjs',
   'apps/api/src/tenant/tenant.service.ts',
   'packages/identity/src/messaging.ts',
   'packages/identity/src/otp.ts',
@@ -31,6 +32,14 @@ function preparar() {
   }
   return tmp;
 }
+
+test('baseline íntegro passa com todas as dependências da guarda', () => {
+  const tmp=preparar();
+  try {
+    const r=spawnSync(process.execPath,['scripts/verificar-recheck-final.mjs'],{cwd:tmp,encoding:'utf8'});
+    assert.equal(r.status,0,r.stdout+'\n'+r.stderr);
+  } finally { fs.rmSync(tmp,{recursive:true,force:true}); }
+});
 
 function mutacao(rel, de, para) {
   const tmp = preparar();

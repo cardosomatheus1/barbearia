@@ -89,6 +89,15 @@ test('recusa promessa explícita de split pronto quando a matriz diz ❌', () =>
   assert.match(r.stderr, /README.md contradiz a matriz/);
 });
 
+test('aceita declaração explícita de integração ausente sem esconder promessa posterior', () => {
+  const pendencia = 'Split/recebedores | Provider simulado | Integração real ausente\nNFS-e | Integração real pendente\n';
+  const r = rodar(repo({ readme: pendencia }));
+  assert.equal(r.status, 0, r.stderr);
+  const contradicao = rodar(repo({ readme: pendencia + 'Split com integração real disponível.\n' }));
+  assert.equal(contradicao.status, 1);
+  assert.match(contradicao.stderr, /README.md contradiz a matriz/);
+});
+
 test('recusa promessa explícita de NFS-e pronta quando não há emissor real', () => {
   const r = rodar(repo({ readme: 'A NFS-e está pronta para produção.\n' }));
   assert.equal(r.status, 1);

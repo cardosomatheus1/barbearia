@@ -1,3 +1,4 @@
+import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
@@ -25,7 +26,6 @@ import {
 import {
   automacoesNaApi,
   filaNaApi,
-  cadastroDoWhatsAppNaApi,
   templatesDoWhatsAppNaApi,
   type AutomacaoNaTelaDoAdmin,
 } from '@/lib/admin-api';
@@ -148,7 +148,7 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
             <p className="item-cadastro__linha">
               {automacao.ativa ? 'Ligada' : 'Desligada'} · manda{' '}
               <strong>{automacao.textoTitulo ?? nomeDoAviso(automacao.tipo)}</strong>
-              {automacao.textoTitulo === null ? ' (o primeiro aprovado deste aviso)' : ''}
+              {automacao.textoTitulo === null ? ' (uma mensagem disponível deste aviso)' : ''}
             </p>
             {/*
               **Ligada e sem texto não manda nada** (bloco 97).
@@ -170,8 +170,8 @@ function Automacao({ automacao, podeMexer, temTextoDoTipo }: {
                   : automacao.enviadas > 0
                     ? 'Parou de sair: '
                     : 'Nada vai sair: '}
-                não há texto aprovado de {nomeDoAviso(automacao.tipo)}.{' '}
-                <a href="/admin/whatsapp">Mandar um para aprovação</a>.
+                não há mensagem disponível de {nomeDoAviso(automacao.tipo)}.{' '}
+                <a href="/admin/whatsapp">Configurar uma mensagem</a>.
               </p>
             ) : null}
             {/*
@@ -263,7 +263,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
   const podeVerCanal = podeNaTela(estado, 'whatsapp.manage');
   const [resposta, canal, templates, saudeDaFila] = await Promise.all([
     podeMexer ? automacoesNaApi(token) : Promise.resolve(null),
-    podeVerCanal ? cadastroDoWhatsAppNaApi(token) : Promise.resolve(null),
+    podeVerCanal ? conexaoWhatsAppNaApi(token) : Promise.resolve(null),
     podeVerCanal ? templatesDoWhatsAppNaApi(token) : Promise.resolve(null),
     // A fila anda? Nenhuma tela sabia responder, e as quatro afirmavam que sim.
     podeMexer ? filaNaApi(token) : Promise.resolve(null),
@@ -291,13 +291,15 @@ export default async function AutomacoesPage({ searchParams }: Props) {
           </button>
         </form>
       </header>
+        <h1 className="painel__titulo">Automações</h1>
         <FalhaDaLeitura code="forbidden" href="/admin/automacoes" oque="as automações" />
       </main>
     );
   }
 
   const fila = saudeDaFila?.ok ? saudeDaFila.dados : null;
-  const canalDePe = canal?.ok ? canal.dados.cadastro?.estado === 'ativo' : null;
+  const canalDePe = canal?.ok ? (canal.dados.canal === 'baileys'
+    ? canal.dados.baileys.disponivel && canal.dados.baileys.estado === 'conectado' : canal.dados.meta?.estado === 'ativo') : null;
   // Só o aprovado sai. Mostrar rascunho e pendente aqui prometeria mensagem que
   // a Meta ainda não deixa mandar.
   /**
@@ -311,10 +313,10 @@ export default async function AutomacoesPage({ searchParams }: Props) {
    * texto por tipo, e as onze automações possíveis saíam todas com a mesma
    * frase.
    */
-  const aprovadosNaMeta = (templates?.ok ? templates.dados.templates : []).filter(
-    (t) => t.estado === 'aprovado',
+  const textosDisponiveis = (templates?.ok ? templates.dados.templates : []).filter(
+    (t) => t.disponivel,
   );
-  const aprovados = aprovadosNaMeta.filter((t) =>
+  const aprovados = textosDisponiveis.filter((t) =>
     (TIPOS_DE_CAMPANHA as readonly string[]).includes(t.tipo),
   );
   // Escolha de mentira é pior que campo nenhum: com um texto só, o rádio pede
@@ -400,8 +402,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
       {canalDePe === false ? (
         <div className="ui-alert ui-alert--warning painel__aviso" role="status">
           O WhatsApp da casa ainda não está pronto, então nada chega ao cliente.{' '}
-          <a href="/admin/whatsapp">Conectar o número e aprovar um texto</a> — são três passos, e
-          a tela diz em qual você está.
+          <a href="/admin/whatsapp">Confira a conexão do número</a>.
         </div>
       ) : null}
 
@@ -675,9 +676,9 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                     uma automação, que fala com quem **não tem horário marcado**.
                   */
                   <p className="alternativa__nota alternativa__nota--risco">
-                    {faltaDeTexto(aprovadosNaMeta.length, aprovados.length) === 'nada_aprovado'
-                      ? 'Nenhum texto aprovado — nada vai sair.'
-                      : `Nenhum texto de ${tiposDeCampanhaPorExtenso('ou')} aprovado — nada vai sair. Os que você tem falam de um horário marcado, e quem recebe uma automação não tem.`}
+                    {faltaDeTexto(textosDisponiveis.length, aprovados.length) === 'nada_aprovado'
+                      ? 'Nenhuma mensagem disponível nesta conexão.'
+                      : `Nenhum texto de ${tiposDeCampanhaPorExtenso('ou')} disponível nesta conexão. Os que você tem falam de um horário marcado, e quem recebe uma automação não tem.`}
                   </p>
                 ) : (
                   aprovados.map((texto, i) => (
@@ -712,8 +713,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                 )}
               </div>
               <p className="ui-field__hint">
-                É este o texto que chega no WhatsApp, e ele não se escreve aqui: a Meta aprova
-                cada um antes de deixar enviar.{' '}
+                Escolha uma mensagem disponível na conexão do número.{' '}
                 <a href="/admin/whatsapp">Escrever outro em WhatsApp</a> — cada texto novo vira
                 uma opção nesta lista.
               </p>

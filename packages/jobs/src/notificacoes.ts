@@ -11,6 +11,8 @@ import {
   type TipoDeNotificacao,
 } from '@barbearia/core';
 import { enfileirar, cancelarTarefas } from './fila.js';
+import { reservarDisparoPromocional } from './disparo-promocional.js';
+import { registrarDesfechoDaNotificacao } from './notificacao-desfecho.js';
 import { chaveDaFalta } from './faltas.js';
 
 /**
@@ -42,6 +44,9 @@ import { chaveDaFalta } from './faltas.js';
  * mas porque `notification_kind` não os nomeia.
  */
 export interface DeQuem {
+  readonly intentKey: string;
+  readonly customerId: string | null;
+  readonly appointmentId?: string | null;
   readonly tenantId: string;
   readonly locationId: string;
 }
@@ -73,7 +78,7 @@ export interface MensagemDeFila extends DeQuem {
  * cabeça de quem o gerou. Ele **não** é gravado: `notifications` guarda que a
  * mensagem saiu, nunca o conteúdo dela.
  */
-export interface MensagemDeVaga {
+export interface MensagemDeVaga extends DeQuem {
   readonly phoneE164: string;
   readonly clienteNome: string;
   readonly barbearia: string;
@@ -94,7 +99,7 @@ export interface MensagemDeVaga {
  * conversa entre o cliente e a casa mora em `feedbacks`, sob RLS, e repeti-la
  * no registro de envio multiplicaria a superfície sem responder nada.
  */
-export interface MensagemDeRecado {
+export interface MensagemDeRecado extends DeQuem {
   readonly phoneE164: string;
   readonly clienteNome: string;
   readonly barbearia: string;
@@ -122,7 +127,7 @@ export interface MensagemDeRecado {
  * exige **um template aprovado por tipo de mensagem**, e é por ele que a
  * implementação de verdade escolhe qual usar.
  */
-export interface MensagemDoClube {
+export interface MensagemDoClube extends DeQuem {
   readonly phoneE164: string;
   readonly barbearia: string;
   readonly motivo: string;
@@ -138,7 +143,7 @@ export interface MensagemDoClube {
  * contador do cliente pede, e porque o WhatsApp oficial exige um template
  * aprovado por tipo de mensagem — com o número como variável, não no corpo.
  */
-export interface MensagemDeNota {
+export interface MensagemDeNota extends DeQuem {
   readonly phoneE164: string;
   readonly barbearia: string;
   readonly numero: string | null;
@@ -574,18 +579,6 @@ async function reivindicarIntencaoDeEnvio(
   return { nossa: false, status: existentes[0]?.status ?? 'uncertain' };
 }
 
-async function finalizarIntencaoDeEnvio(
-  tx: TransactionClient,
-  intentKey: string,
-  status: 'uncertain' | 'sent',
-): Promise<void> {
-  await tx.$executeRaw`
-    UPDATE notification_send_intents
-       SET status = ${status}, updated_at = now()
-     WHERE intent_key = ${intentKey}
-  `;
-}
-
 /** Falha **definitiva** libera a intenção para a fila tentar de novo. */
 async function liberarIntencaoDeEnvio(tx: TransactionClient, intentKey: string): Promise<void> {
   await tx.$executeRaw`
@@ -663,6 +656,7 @@ export async function executarAvisoDeAgendamento(params: {
     await params.provider.enviarDeAgendamento({
       tenantId: params.tenantId,
       locationId: estado.location_id,
+      intentKey, customerId: estado.customer_id, appointmentId: params.appointmentId,
       phoneE164: estado.phone ?? '',
       tipo: params.tipo,
       clienteNome: estado.customer_name ?? 'cliente',
@@ -673,7 +667,6 @@ export async function executarAvisoDeAgendamento(params: {
   } catch (erro) {
     if (erro instanceof WhatsAppDeliveryUnknownError) {
       return withTenant(params.tenantId, async (tx) => {
-        await finalizarIntencaoDeEnvio(tx, intentKey, 'uncertain');
         return registrar(tx, params, estado, 'entrega_incerta');
       });
     }
@@ -682,7 +675,6 @@ export async function executarAvisoDeAgendamento(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
-    await finalizarIntencaoDeEnvio(tx, intentKey, 'sent');
     return registrar(tx, params, estado, null);
   });
 }
@@ -696,7 +688,7 @@ export async function executarAvisoDeAgendamento(params: {
  */
 async function registrar(
   tx: TransactionClient,
-  params: { readonly appointmentId: string; readonly tipo: TipoDeNotificacao },
+  params: { readonly appointmentId: string; readonly tipo: TipoDeNotificacao; readonly agora: Date },
   estado: EstadoDoAviso | null,
   motivo: MotivoDeNaoEnviar | null,
 ): Promise<{ enviado: boolean; motivo: MotivoDeNaoEnviar | null }> {
@@ -704,6 +696,14 @@ async function registrar(
   // Já enviada não vira segunda linha: ela poluiria o teto mensal e a contagem
   // de "quantas vezes avisamos este cliente".
   if (motivo === 'ja_enviada') return { enviado: false, motivo };
+  if (motivo === null || motivo === 'entrega_incerta') {
+    await registrarDesfechoDaNotificacao(tx, { intentKey: chaveDaNotificacao(params.tipo, params.appointmentId),
+      tipo: params.tipo, customerId: estado?.customer_id ?? null, appointmentId: params.appointmentId,
+      phoneMasked: estado?.phone ? maskPhone(estado.phone) : null,
+      estado: motivo === null ? 'sent' : 'uncertain', agora: params.agora });
+    return { enviado, motivo };
+  }
+
 
   await tx.$executeRaw`
     INSERT INTO notifications
@@ -717,7 +717,7 @@ async function registrar(
       -- ja fazem: a mensagem pode ter saido e nao vamos repetir, e skipped diria
       -- que a casa decidiu nao mandar, que e outra coisa e a que a recepcao le
       -- como "entao mando eu". Sem crase: ela fecharia o template.
-      ${enviado ? 'sent' : motivo === 'entrega_incerta' ? 'failed' : 'skipped'}::notification_status,
+      'skipped'::notification_status,
       ${motivo},
       ${estado?.phone ? maskPhone(estado.phone) : null}
     )
@@ -813,6 +813,7 @@ export async function executarAvisoDeFila(params: {
     await params.provider.enviarDeFila({
       tenantId: params.tenantId,
       locationId: entrada.location_id,
+      intentKey, customerId: entrada.customer_id,
       phoneE164: entrada.phone,
       clienteNome: entrada.customer_name,
       barbearia: entrada.tenant_name,
@@ -821,14 +822,8 @@ export async function executarAvisoDeFila(params: {
   } catch (erro) {
     if (erro instanceof WhatsAppDeliveryUnknownError) {
       return withTenant(params.tenantId, async (tx) => {
-        await finalizarIntencaoDeEnvio(tx, intentKey, 'uncertain');
-        await tx.$executeRaw`
-          INSERT INTO notifications (tenant_id, kind, customer_id, status, reason, phone_masked)
-          VALUES (
-            NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-            'sua_vez', ${entrada.customer_id}::uuid, 'failed', 'entrega_incerta', ${maskPhone(entrada.phone)}
-          )
-        `;
+        await registrarDesfechoDaNotificacao(tx, { intentKey, tipo: 'sua_vez', customerId: entrada.customer_id,
+          phoneMasked: maskPhone(entrada.phone), estado: 'uncertain', agora: new Date() });
         return { enviado: false, motivo: 'entrega_incerta' as const };
       });
     }
@@ -837,14 +832,8 @@ export async function executarAvisoDeFila(params: {
   }
 
   return withTenant(params.tenantId, async (tx) => {
-    await finalizarIntencaoDeEnvio(tx, intentKey, 'sent');
-    await tx.$executeRaw`
-      INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
-      VALUES (
-        NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-        'sua_vez', ${entrada.customer_id}::uuid, 'sent', ${maskPhone(entrada.phone)}
-      )
-    `;
+    await registrarDesfechoDaNotificacao(tx, { intentKey, tipo: 'sua_vez', customerId: entrada.customer_id,
+      phoneMasked: maskPhone(entrada.phone), estado: 'sent', agora: new Date() });
     return { enviado: true, motivo: null };
   });
 }
@@ -880,6 +869,7 @@ export async function varrerRetornos(params: {
         timezone: string;
         comeback_after_days: number;
         ultima_visita: Date | null;
+        ultimo_retorno_id: string | null;
         promocionais_no_mes: bigint;
         ja_enviada: boolean;
         location_id: string;
@@ -888,6 +878,8 @@ export async function varrerRetornos(params: {
       SELECT c.id AS customer_id, c.name AS customer_name, c.phone_e164 AS phone,
              c.accepts_marketing, t.name AS tenant_name,
              l.timezone, l.comeback_after_days, l.location_id,
+             (SELECT n.id FROM notifications n WHERE n.customer_id = c.id AND n.kind = 'retorno'
+               AND n.status = 'sent' ORDER BY n.sent_at DESC, n.id DESC LIMIT 1) AS ultimo_retorno_id,
              (SELECT max(a.starts_at) FROM appointments a
                WHERE a.customer_id = c.id AND a.status = 'completed') AS ultima_visita,
              (SELECT count(*) FROM notifications n
@@ -944,9 +936,10 @@ export async function varrerRetornos(params: {
      * convite novamente, como já fazia antes.
      */
     const episodio = linha.ultima_visita?.toISOString() ?? 'sem-visita';
-    const intentKey = `retorno:${linha.customer_id}:${episodio}`;
+    const intentKey = `retorno:${linha.customer_id}:${episodio}:${linha.ultimo_retorno_id ?? 'primeiro'}`;
     const intencao = await withTenant(params.tenantId, (tx) =>
-      reivindicarIntencaoDeEnvio(tx, intentKey),
+      reservarDisparoPromocional(tx, { tenantId: params.tenantId, customerId: linha.customer_id,
+        intentKey, tipo: 'retorno', agora: params.agora, timeZone: linha.timezone }),
     );
     if (!intencao.nossa) continue;
 
@@ -954,6 +947,7 @@ export async function varrerRetornos(params: {
       await params.provider.enviarDeAgendamento({
         tenantId: params.tenantId,
         locationId: linha.location_id,
+        intentKey, customerId: linha.customer_id,
         phoneE164: linha.phone,
         tipo: 'retorno',
         clienteNome: linha.customer_name,
@@ -964,16 +958,8 @@ export async function varrerRetornos(params: {
     } catch (erro) {
       if (erro instanceof WhatsAppDeliveryUnknownError) {
         await withTenant(params.tenantId, async (tx) => {
-          await finalizarIntencaoDeEnvio(tx, intentKey, 'uncertain');
-          await tx.$executeRaw`
-            INSERT INTO notifications
-              (tenant_id, kind, customer_id, status, reason, phone_masked)
-            VALUES (
-              NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-              'retorno', ${linha.customer_id}::uuid, 'failed', 'entrega_incerta',
-              ${maskPhone(linha.phone)}
-            )
-          `;
+          await registrarDesfechoDaNotificacao(tx, { intentKey, tipo: 'retorno', customerId: linha.customer_id,
+            phoneMasked: maskPhone(linha.phone), estado: 'uncertain', agora: params.agora });
         });
         continue;
       }
@@ -984,17 +970,8 @@ export async function varrerRetornos(params: {
     }
 
     await withTenant(params.tenantId, async (tx) => {
-      await tx.$executeRaw`
-        INSERT INTO notifications (tenant_id, kind, customer_id, status, phone_masked)
-        VALUES (
-          NULLIF(current_setting('app.tenant_id', true), '')::uuid,
-          'retorno', ${linha.customer_id}::uuid, 'sent', ${maskPhone(linha.phone)}
-        )
-      `;
-      // Depois que o fato `sent` existe, ele próprio barra os próximos 60 dias.
-      // Remover a intenção preserva o comportamento histórico de poder convidar
-      // novamente depois do prazo, sem sacrificar a segurança da janela ambígua.
-      await liberarIntencaoDeEnvio(tx, intentKey);
+      await registrarDesfechoDaNotificacao(tx, { intentKey, tipo: 'retorno', customerId: linha.customer_id,
+        phoneMasked: maskPhone(linha.phone), estado: 'sent', agora: params.agora });
     });
     enviados += 1;
   }

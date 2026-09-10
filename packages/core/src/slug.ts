@@ -42,6 +42,7 @@ export const SLUGS_RESERVADOS: ReadonlySet<string> = new Set([
   'ir',
   'media',
   'pagamento',
+  'nota',
   'plataforma',
   'privacidade',
   'termos',

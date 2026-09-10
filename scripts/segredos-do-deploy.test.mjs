@@ -34,6 +34,7 @@ const SCRIPT = join(RAIZ, 'deploy', 'segredos.sh');
 
 const OBRIGATORIOS = [
   'POSTGRES_PASSWORD',
+  'INTERNAL_PROXY_SECRET',
   'APP_DB_PASSWORD',
   'STAFF_EMAIL_PEPPER',
   'MARKETPLACE_ORIGIN_SECRET',
@@ -41,6 +42,7 @@ const OBRIGATORIOS = [
   'MFA_SECRET_KEY',
   'WEBHOOK_SECRET_KEY',
   'WHATSAPP_TOKEN_KEY',
+  'FISCAL_SECRET_KEY',
   'KYC_INTENT_HMAC_SECRET',
   'BACKUP_ENCRYPTION_KEY',
 ];
@@ -95,6 +97,7 @@ describe('os segredos do deploy', () => {
     expect(Buffer.from(env['MFA_SECRET_KEY'], 'base64')).toHaveLength(32);
     expect(Buffer.from(env['WEBHOOK_SECRET_KEY'], 'base64')).toHaveLength(32);
     expect(Buffer.from(env['WHATSAPP_TOKEN_KEY'], 'base64')).toHaveLength(32);
+    expect(Buffer.from(env['FISCAL_SECRET_KEY'], 'base64')).toHaveLength(32);
     expect(Buffer.from(env['BACKUP_ENCRYPTION_KEY'], 'base64')).toHaveLength(32);
   });
 

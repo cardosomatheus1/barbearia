@@ -1,0 +1,61 @@
+diff --git a/src/queue_job.js b/src/queue_job.js
+index baab89c48e66d4c3fb704abd35c1cfff979bb518..9a561320adf11cf283d223fa8964bbc727b4cf32 100644
+--- a/src/queue_job.js
++++ b/src/queue_job.js
+@@ -47,7 +47,7 @@ module.exports = function(bucket, awaitable) {
+         if (typeof bucket === 'string') {
+             awaitable.name = bucket;
+         } else {
+-            console.warn("Unhandled bucket type (for naming):", typeof bucket, bucket);
++            console.warn("Unhandled bucket type (for naming):", typeof bucket);
+         }
+     }
+     let inactive;
+diff --git a/src/session_cipher.js b/src/session_cipher.js
+index 0e6df11ee52cf6de3403a0c6f38254c674690312..6cfaadc5e7c9eaccc30d5f9d275677eaeb504582 100644
+--- a/src/session_cipher.js
++++ b/src/session_cipher.js
+@@ -156,7 +156,7 @@ class SessionCipher {
+         }
+         console.error("Failed to decrypt message with any known session...");
+         for (const e of errs) {
+-            console.error("Session error:" + e, e.stack);
++            console.error("Signal session decryption failed");
+         }
+         throw new errors.SessionError("No matching sessions found for message");
+     }
+diff --git a/src/session_record.js b/src/session_record.js
+index 7626a3927fadcdf7f66b3d0c9cf8c63d33da579b..447646460bffed868c1cb5e097cf9abc7e1ed0e5 100644
+--- a/src/session_record.js
++++ b/src/session_record.js
+@@ -267,10 +267,10 @@ class SessionRecord {
+ 
+     closeSession(session) {
+         if (this.isClosed(session)) {
+-            console.warn("Session already closed", session);
++            console.warn("Session already closed");
+             return;
+         }
+-        console.info("Closing session:", session);
++        // Session contains private keys; never log it.
+         session.indexInfo.closed = Date.now();
+     }
+ 
+@@ -278,7 +278,7 @@ class SessionRecord {
+         if (!this.isClosed(session)) {
+             console.warn("Session already open");
+         }
+-        console.info("Opening session:", session);
++        // Session contains private keys; never log it.
+         session.indexInfo.closed = -1;
+     }
+ 
+@@ -298,7 +298,7 @@ class SessionRecord {
+                 }
+             }
+             if (oldestKey) {
+-                console.info("Removing old closed session:", oldestSession);
++                // Session contains private keys; never log it.
+                 delete this.sessions[oldestKey];
+             } else {
+                 throw new Error('Corrupt sessions object');

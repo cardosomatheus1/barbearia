@@ -21,6 +21,7 @@ import {
   gravarRespostaDoTemplate,
   desconectarNumero,
 } from './whatsapp.js';
+import { conciliarWhatsAppDoTenant } from './whatsapp-meta.js';
 import { enviarMensagemAvulsa } from './mensagem-avulsa.js';
 import { semTenant, withTenant } from '@barbearia/db';
 import type { TemplateNaTela } from './whatsapp.js';
@@ -147,6 +148,24 @@ describeIfDb('WhatsApp oficial', () => {
          '2026-09-21T14:00:00Z', '2026-09-21T14:30:00Z',
          '2026-09-21T14:00:00Z', '2026-09-21T14:30:00Z');
     `);
+  });
+
+  it('conciliação visita filiais após falha na matriz e não visita tenant vizinho', async () => {
+    const filial = 'a5555555-0000-0000-0000-000000000003';
+    await admin.$executeRaw`INSERT INTO locations (id, tenant_id, name, timezone)
+      VALUES (${filial}::uuid, ${TENANT}::uuid, 'Filial', 'America/Bahia')`;
+    const visitadas: string[] = [];
+    const resultado = await conciliarWhatsAppDoTenant(TENANT, AGORA, async (tenantId, locationId, agora) => {
+      expect(tenantId).toBe(TENANT);
+      expect(agora).toBe(AGORA);
+      visitadas.push(locationId);
+      if (locationId === LOCAL) throw new Error('provedor indisponível');
+      return { promovido: true, templates: 3 };
+    });
+    expect(visitadas).toEqual([LOCAL, filial]);
+    expect(resultado).toEqual({ promovido: true, templates: 3, unidades: 2, falhas: 1 });
+    const vazia = await conciliarWhatsAppDoTenant('55555555-3333-3333-3333-333333333333', AGORA);
+    expect(vazia).toEqual({ promovido: false, templates: 0, unidades: 0, falhas: 0 });
   });
 
   const cadastrar = (token: string | null = 'EAAG-token-da-meta') =>

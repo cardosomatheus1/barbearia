@@ -470,6 +470,10 @@ export const BOTOES_POSSIVEIS: Readonly<Record<TipoDeNotificacao, readonly Botao
    */
   lembrete_2h: ['confirmar', 'remarcar', 'cancelar'],
   sua_vez: [],
+  vaga_liberada: [],
+  resposta_recado: [],
+  aviso_clube: [],
+  nota_fiscal: [],
   senha_de_acesso: [],
   retorno: ['agendar_novamente', 'parar_de_receber'],
   /**
@@ -597,6 +601,10 @@ export const BOTOES_DO_AVISO: Readonly<Record<TipoDeNotificacao, readonly BotaoD
   // remanejar no mesmo dia, e oferecer produz a frustração de tentar e não ter.
   lembrete_2h: ['confirmar', 'cancelar'],
   sua_vez: [],
+  vaga_liberada: [],
+  resposta_recado: [],
+  aviso_clube: [],
+  nota_fiscal: [],
   senha_de_acesso: [],
   retorno: ['agendar_novamente'],
   /**

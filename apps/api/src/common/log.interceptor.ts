@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { CallHandler, ExecutionContext, HttpException, Injectable, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { catchError, tap, throwError } from 'rxjs';
 import type { Observable } from 'rxjs';
@@ -54,7 +54,10 @@ export class LogInterceptor implements NestInterceptor {
     const escrever = (status: number, erro?: string): void => {
       const linha = montarLinha({
         metodo: requisicao.method,
-        url: requisicao.originalUrl,
+        // O padrão registrado pelo framework conserva a operação e omite TODOS
+        // os parâmetros, inclusive tokens base64url de fila/oferta. Tentar
+        // reconhecer formatos de segredo na URL deixava essas credenciais no log.
+        url: typeof requisicao.route?.path === 'string' ? requisicao.route.path : '/rota-nao-identificada',
         status,
         duracaoMs: Number(process.hrtime.bigint() - inicio) / 1e6,
         requisicaoId,
@@ -72,7 +75,7 @@ export class LogInterceptor implements NestInterceptor {
         // O filtro de exceção ainda não rodou, então o status da resposta
         // continua sendo o de sucesso. O código do erro vem do domínio; a
         // mensagem, não — ela pode carregar dado de cliente.
-        const status = erro instanceof DomainError ? erro.status : 500;
+        const status = erro instanceof DomainError ? erro.status : erro instanceof HttpException ? erro.getStatus() : 500;
         const codigo = erro instanceof DomainError ? erro.code : 'internal_error';
         escrever(status, codigo);
         return throwError(() => erro);

@@ -42,6 +42,11 @@ scripts/pg-de-pe.sh
 RAPIDO=""
 [ "${1:-}" = "--rapido" ] && RAPIDO=1
 
+# Todos os processos de teste compartilham a mesma senha efêmera do role.
+if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
+  export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
+fi
+
 failures=()
 
 # Roda em segundo plano, guardando a saída para ser impressa na ordem certa.
@@ -522,51 +527,51 @@ precisa "@barbearia/ui" && lancar "ui — tokens e componentes" pnpm --filter @b
 precisa "@barbearia/web" && lancar "web — lógica de tela" pnpm --filter @barbearia/web test
 # O resolvedor tem teste próprio: ele decide o que vai ser conferido, e errar
 # para menos ali devolveria verde sobre código que ninguém rodou.
-lancar "resolvedor de afetados" npx vitest run scripts/afetados.test.mjs
+lancar "resolvedor de afetados" pnpm exec vitest run scripts/afetados.test.mjs
 lancar "guarda da matriz de prontidão" node --test scripts/verificar-prontidao.test.mjs
 lancar "guarda CSS R10 — negativos" node --test scripts/verificar-r10-css.test.mjs
-lancar "guarda R11 — módulos por domínio" npx vitest run scripts/verificar-r11-modulos.test.mjs
+lancar "guarda R11 — módulos por domínio" pnpm exec vitest run scripts/verificar-r11-modulos.test.mjs
 # Crase dentro de consulta fecha o tagged template e o erro sai como sintaxe em
 # cima de uma linha de prosa. Custou três voltas de build em três blocos.
-lancar "crase em consulta SQL" npx vitest run scripts/crase-em-sql.test.mjs
+lancar "crase em consulta SQL" pnpm exec vitest run scripts/crase-em-sql.test.mjs
 # Terceira vez que crase dentro de template literal custa uma volta de build: SQL,
 # CSS e agora o script do Embedded Signup. O erro sai como sintaxe sobre prosa.
-lancar "crase em script inline" npx vitest run scripts/crase-em-script-inline.test.mjs
-lancar "o .env.example é a lista" npx vitest run scripts/env-example.test.mjs
-lancar "recurso do menu × catálogo" npx vitest run scripts/recursos-da-navegacao.test.mjs
+lancar "crase em script inline" pnpm exec vitest run scripts/crase-em-script-inline.test.mjs
+lancar "o .env.example é a lista" pnpm exec vitest run scripts/env-example.test.mjs
+lancar "recurso do menu × catálogo" pnpm exec vitest run scripts/recursos-da-navegacao.test.mjs
 # A RLS separa barbearias e não separa lojas: `UPDATE locations` sem WHERE
 # alcança a rede inteira, e sete estavam assim ao mesmo tempo no bloco 111.
-lancar "UPDATE de unidade com WHERE" npx vitest run scripts/update-de-unidade-com-where.test.mjs
+lancar "UPDATE de unidade com WHERE" pnpm exec vitest run scripts/update-de-unidade-com-where.test.mjs
 # Evento no catálogo sem quem o dispare é promessa vazia na superfície que a
 # barbearia mostra a terceiros — e do lado de lá ninguém tem como investigar.
-lancar "evento de webhook com emissor" npx vitest run scripts/evento-de-webhook-com-emissor.test.mjs
+lancar "evento de webhook com emissor" pnpm exec vitest run scripts/evento-de-webhook-com-emissor.test.mjs
 # A tela de chaves prometia trinta e um escopos e duas rotas honravam dois.
-lancar "escopo de chave × rota" npx vitest run scripts/escopo-com-rota.test.mjs
+lancar "escopo de chave × rota" pnpm exec vitest run scripts/escopo-com-rota.test.mjs
 # Id da URL sem pipe vira 500 sobre entrada externa, em vez de 400 com motivo.
-lancar "@Param com pipe" npx vitest run scripts/param-com-pipe.test.mjs
+lancar "@Param com pipe" pnpm exec vitest run scripts/param-com-pipe.test.mjs
 # Métrica no catálogo que ninguém calcula responde "—" para sempre, e o link
 # "conferir na tela" precisa levar a uma tela que mostre o número.
-lancar "métrica com resposta" npx vitest run scripts/metrica-com-resposta.test.mjs
+lancar "métrica com resposta" pnpm exec vitest run scripts/metrica-com-resposta.test.mjs
 # `professionals` guarda balcao, sala e quem atende fora junto de quem atende.
 # Contados como cadeira, o denominador da ocupacao cresce e a hora cheia deixa
 # de parecer cheia -- e e ela que decide sinal, preco de pico e hora fria.
-lancar "capacidade com tipo de cadeira" npx vitest run scripts/cadeira-com-tipo.test.mjs
+lancar "capacidade com tipo de cadeira" pnpm exec vitest run scripts/cadeira-com-tipo.test.mjs
 # A RLS separa barbearias e nao separa lojas dentro de uma. Oito defeitos da
 # varredura de multiunidade eram a mesma linha: leitura por id numa tabela com
 # location_id, dentro de funcao que ja recebia a loja. O pior fechava a comanda
 # da matriz com o dinheiro caindo na gaveta da filial.
-lancar "id conferido contra a unidade" npx vitest run scripts/id-com-unidade.test.mjs
+lancar "id conferido contra a unidade" pnpm exec vitest run scripts/id-com-unidade.test.mjs
 # Permissao no catalogo que nenhuma rota exige e controle de seguranca que o
 # dono acredita ter configurado: a caixa esta la, ele desmarca, e nada muda.
-lancar "permissao com rota" npx vitest run scripts/permissao-com-rota.test.mjs
-lancar "recusa com frase" npx vitest run scripts/recusa-com-frase.test.mjs
-lancar "uniao do dominio" npx vitest run scripts/uniao-do-dominio.test.mjs
-lancar "summary com classe" npx vitest run scripts/summary-com-classe.test.mjs
+lancar "permissao com rota" pnpm exec vitest run scripts/permissao-com-rota.test.mjs
+lancar "recusa com frase" pnpm exec vitest run scripts/recusa-com-frase.test.mjs
+lancar "uniao do dominio" pnpm exec vitest run scripts/uniao-do-dominio.test.mjs
+lancar "summary com classe" pnpm exec vitest run scripts/summary-com-classe.test.mjs
 # Rota nova de primeiro nível é endereço que sai da mão de uma barbearia sem
 # nada acusar: o Next serve a rota, `/{slug}` nunca é consultado, e o sintoma é
 # "meu link não abre". Quatro rotas já tinham passado por baixo da lista.
-lancar "rota de primeiro nível × slug reservado" npx vitest run scripts/rotas-reservadas.test.mjs
-lancar "segredos do deploy" npx vitest run scripts/segredos-do-deploy.test.mjs
+lancar "rota de primeiro nível × slug reservado" pnpm exec vitest run scripts/rotas-reservadas.test.mjs
+lancar "segredos do deploy" pnpm exec vitest run scripts/segredos-do-deploy.test.mjs
 lancar "configuração de produção" node --test scripts/verificar-configuracao-producao.test.mjs
 # Segurança de lançamento: nenhuma função raw-unsafe em produção, nenhum segredo
 # no snapshot e proteção anti-bot não pode ser removida só de um lado do fluxo.
@@ -609,7 +614,7 @@ lancar "estado de agendamento — negativos" node --test scripts/estado-de-agend
 # outros três são scripts que lançam em regressão e saem diferente de zero. Rodar
 # um com o runner do outro dá verde sobre nada — `node --test` conta o arquivo e
 # o `vitest` diz "No test suite found".
-lancar "varredura com chamador" npx vitest run scripts/varredura-com-chamador.test.mjs
+lancar "varredura com chamador" pnpm exec vitest run scripts/varredura-com-chamador.test.mjs
 lancar "R12 usabilidade — negativos" node scripts/r12-usabilidade.test.mjs
 lancar "R6 promessas — negativos" node scripts/verificar-r6-promessas.test.mjs
 lancar "R8 comercial — negativos" node scripts/verificar-r8-comercial.test.mjs
@@ -628,6 +633,9 @@ lancar "rede de deploy" node scripts/verificar-rede-de-deploy.mjs
 lancar "rede de deploy — negativos" node --test scripts/verificar-rede-de-deploy.test.mjs
 lancar "criptografia de backup" node scripts/verificar-criptografia-backup.mjs
 lancar "criptografia de backup — runtime" node --test scripts/backup-crypto.test.mjs
+lancar "portão do deploy" node --test scripts/esteira-deploy.test.mjs scripts/deploy-sha.test.mjs scripts/instalador-deploy.test.mjs
+lancar "sondas do deploy" node --test scripts/prontidao-deploy.test.mjs
+lancar "restore com role da aplicação" node --test scripts/restauracao-segura.test.mjs
 lancar "backup shell criptografado" node --test scripts/backup-shell.test.mjs
 lancar "criptografia de backup — negativos" node --test scripts/verificar-criptografia-backup.test.mjs
 lancar "hardening de integrações" node --test scripts/verificar-hardening-integracoes.test.mjs
@@ -637,14 +645,14 @@ lancar "observabilidade e diagnóstico" node scripts/verificar-observabilidade.m
 lancar "observabilidade — negativos" node scripts/verificar-observabilidade.test.mjs
 # Máquina recém-instalada não tem crontab, e era esse o caso que instalava um
 # crontab vazio e deixava o backup diário — a única cópia dos dados — sem existir.
-lancar "cron do backup" npx vitest run scripts/cron-do-backup.test.mjs
-lancar "trava da semente" npx vitest run scripts/semente-permitida.test.mjs
+lancar "cron do backup" pnpm exec vitest run scripts/cron-do-backup.test.mjs
+lancar "trava da semente" pnpm exec vitest run scripts/semente-permitida.test.mjs
 # Semente que inventa tipo ou motivo faz o produto parecer capaz do que não é —
 # e já contaminou o vocabulário do domínio uma vez.
-lancar "semente não inventa" npx vitest run scripts/semente-nao-inventa.test.mjs
+lancar "semente não inventa" pnpm exec vitest run scripts/semente-nao-inventa.test.mjs
 # Migração destrutiva tira do rollback a forma barata dele: a volta deixa de ser
 # "sobe a imagem anterior" e vira "restaura backup e perde o que veio depois".
-lancar "migração aditiva" npx vitest run packages/db/test/migracao-aditiva.test.mjs
+lancar "migração aditiva" pnpm exec vitest run packages/db/test/migracao-aditiva.test.mjs
 
 if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   export APP_DB_PASSWORD="${APP_DB_PASSWORD:-$(openssl rand -hex 16)}"
@@ -652,7 +660,7 @@ if [ -n "${ADMIN_DATABASE_URL:-}" ]; then
   # Precisa de Postgres de verdade: o que se prova é que a **segunda** passada
   # das migrações não quebra. Era ela que abortava o compose e derrubava o site
   # a cada atualização.
-  lancar "migrações repetíveis" npx vitest run packages/db/test/migracoes-repetiveis.test.mjs
+  lancar "migrações repetíveis" pnpm exec vitest run packages/db/test/migracoes-repetiveis.test.mjs
 
   for entrada in "${NOMES[@]}"; do
     pacote="${entrada%%:*}"

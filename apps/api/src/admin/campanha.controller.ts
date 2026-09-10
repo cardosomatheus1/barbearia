@@ -100,7 +100,7 @@ export class CampanhaController {
   ) {
     try {
       return await criarCampanha({
-        tenantId: staff.tenantId,
+        tenantId: staff.tenantId, locationId: (await unidadeDoBalcao(staff)).id,
         nome: body.nome,
         filtro: body.filtro,
         valorDoFiltro: body.valorDoFiltro,

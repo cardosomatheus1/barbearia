@@ -70,3 +70,26 @@ test('histórico recusa secret genérico removido sem imprimir valor', () => {
   const r = executarHistorico('config.txt', `WHATSAPP_APP_SECRET=${valor}\n`);
   assert.equal(r.status, 1, r.stderr); assert.match(r.stderr, /secret literal no histórico Git/); assert.doesNotMatch(r.stderr, new RegExp(valor));
 });
+
+
+test('histórico usa o caminho para aceitar fixture genérica removida', () => {
+  const r = executarHistorico('src/config.test.ts', "const API_KEY = 'valor-de-fixture-12345678901234567890';\n");
+  assert.equal(r.status, 0, r.stderr);
+});
+
+test('histórico mantém padrões de credenciais em testes e informa arquivo e commit', () => {
+  const valor = 'AK' + 'IA' + 'ABCDEFGHIJKLMNOP';
+  const r = executarHistorico('src/config.test.ts', `const chave = '${valor}';\n`);
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stderr, /AWS access key no histórico Git: src\/config.test.ts@[a-f0-9]{40}:1/);
+  assert.doesNotMatch(r.stderr, new RegExp(valor));
+});
+
+
+test('conteúdo parecido com cabeçalho de diff não transforma produção em fixture', () => {
+  const valor = 'segredo-antigo-unico-12345678901234567890';
+  const r = executarHistorico('config.txt', `++ b/config.test.ts\nAPI_KEY=${valor}\n`);
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stderr, /secret literal no histórico Git: config.txt@/);
+  assert.doesNotMatch(r.stderr, new RegExp(valor));
+});

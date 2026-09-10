@@ -36,6 +36,14 @@ morrer() { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 [ -n "$DOMINIO" ] || morrer "uso: $0 <dominio> <email-para-o-certificado>"
 [ -n "$EMAIL" ] || morrer "uso: $0 <dominio> <email-para-o-certificado>"
 [ "$(id -u)" = 0 ] || morrer "rode como root (ou com sudo): ele instala pacote e escreve em $DESTINO"
+command -v node >/dev/null && node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' \
+  || morrer "instale Node.js 22 ou superior no servidor antes de executar o instalador"
+
+# Uma instalação existente segue o procedimento que faz backup antes de migrar.
+if [ -d "$DESTINO/.git" ] && [ -f "$DESTINO/.env" ]; then
+  titulo "instalação existente: atualizando com backup e portão"
+  exec env DESTINO="$DESTINO" BRANCH="$BRANCH" "$DESTINO/deploy/atualizar.sh"
+fi
 
 # ---------------------------------------------------------------------------
 # 1. O DNS, antes de qualquer coisa
@@ -80,11 +88,16 @@ if [ -z "$BRANCH" ]; then
 fi
 if [ -d "$DESTINO/.git" ]; then
   git -C "$DESTINO" fetch --quiet origin "$BRANCH"
-  git -C "$DESTINO" checkout --quiet -B "$BRANCH" "origin/$BRANCH"
+  ALVO="$(git -C "$DESTINO" rev-parse "origin/$BRANCH")"
+  node "$DESTINO/deploy/verificar-esteira.mjs" "$ALVO" "$BRANCH" || morrer "o portão não aprovou a instalação"
+  git -C "$DESTINO" checkout --quiet -B "$BRANCH" "$ALVO"
 else
   git clone --quiet --branch "$BRANCH" "$REPO" "$DESTINO"
+  ALVO="$(git -C "$DESTINO" rev-parse HEAD)"
+  node "$DESTINO/deploy/verificar-esteira.mjs" "$ALVO" "$BRANCH" || morrer "o portão não aprovou a instalação"
 fi
 cd "$DESTINO"
+export APP_VERSION="$ALVO"
 verde "  ok  $BRANCH @ $(git -C "$DESTINO" rev-parse --short HEAD)"
 
 # ---------------------------------------------------------------------------
@@ -136,13 +149,13 @@ docker compose -f deploy/compose.yml --env-file "$ENV" up -d --build
 
 titulo "esperando o produto responder"
 for i in $(seq 1 60); do
-  if curl -fsS --max-time 5 "https://$DOMINIO/" > /dev/null 2>&1; then
-    verde "  ok  https://$DOMINIO responde"
+  if node "$DESTINO/deploy/verificar-prontidao.mjs" "$APP_VERSION" > /dev/null 2>&1 \
+    && curl -fsS --max-time 5 "https://$DOMINIO/" > /dev/null 2>&1; then
+    verde "  ok  API, banco, RLS, worker e web prontos em https://$DOMINIO"
     break
   fi
   [ "$i" = 60 ] && {
-    amarelo "  ainda não respondeu. O certificado pode estar sendo emitido — veja:"
-    amarelo "    docker compose -f deploy/compose.yml logs caddy --tail 40"
+    morrer "a pilha não ficou pronta na versão esperada. Confira os logs do compose antes de concluir a instalação"
   }
   sleep 5
 done

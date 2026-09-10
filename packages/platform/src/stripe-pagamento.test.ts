@@ -149,11 +149,16 @@ describe('a barbearia cobrando o cliente', () => {
      * que a RLS existe para impedir.
      */
     const { cliente, chamadas } = stripeDeMentira([
-      { status: 200, json: { id: 'pi_1', status: 'processing' } },
+      { status: 200, json: { id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' } },
     ]);
 
     await new StripePaymentProvider(cliente).criarCobranca({ ...PEDIDO, meio: 'cartao' });
 
+    expect(chamadas[0]?.url).toContain('/checkout/sessions');
+    const campos = new URLSearchParams(chamadas[0]?.corpo ?? '');
+    expect(campos.get('payment_method_types[0]')).toBe('card');
+    expect(campos.get('payment_intent_data[metadata][tenant_id]')).toBe(PEDIDO.tenantId);
+    expect(campos.get('payment_intent_data[metadata][order_id]')).toBe(PEDIDO.orderId);
     const corpo = chamadas[0]?.corpo ?? '';
     expect(corpo).toContain(`metadata%5Border_id%5D=${PEDIDO.orderId}`);
     expect(corpo).toContain(`metadata%5Btenant_id%5D=${PEDIDO.tenantId}`);
@@ -341,6 +346,9 @@ describe('a plataforma cobrando a barbearia', () => {
   it('retentativa legítima usa outra chave sem perder idempotência do mesmo degrau', async () => {
     const { cliente, chamadas } = stripeDeMentira([
       { status: 200, json: { id: 'pi_1', status: 'requires_payment_method', last_payment_error: { code: 'card_declined' } } },
+      // A recusa só é definitiva quando o PI não pode mais ser confirmado.
+      { status: 200, json: { id: 'pi_1', status: 'requires_payment_method', last_payment_error: { code: 'card_declined' } } },
+      { status: 200, json: { id: 'pi_1', status: 'canceled' } },
       { status: 200, json: { id: 'pi_2', status: 'succeeded' } },
     ]);
     const provider = new StripePspProvider(cliente);
@@ -349,7 +357,64 @@ describe('a plataforma cobrando a barbearia', () => {
     await provider.cobrar({ ...COBRANCA, tentativa: 2 });
 
     expect(chamadas[0]?.cabecalhos['idempotency-key']).toBe(`fatura:${COBRANCA.faturaId}:tentativa:1`);
-    expect(chamadas[1]?.cabecalhos['idempotency-key']).toBe(`fatura:${COBRANCA.faturaId}:tentativa:2`);
+    expect(chamadas[3]?.cabecalhos['idempotency-key']).toBe(`fatura:${COBRANCA.faturaId}:tentativa:2`);
+  });
+
+  it('autenticação exigida preserva o PaymentIntent sem consumir outra tentativa', async () => {
+    const { cliente } = stripeDeMentira([{ status: 402, json: { error: { code: 'authentication_required',
+      payment_intent: { id: 'pi_autenticacao', client_secret: 'segredo-nao-deve-ir-ao-erro' } } } }]);
+    expect(await new StripePspProvider(cliente).cobrar(COBRANCA)).toEqual({ estado: 'pendente',chargeId: 'pi_autenticacao',motivo: 'authentication_required' });
+    expect(paraEstadoDaCobranca('requires_payment_method','authentication_required')).toBe('pendente');
+    const consulta = stripeDeMentira([{ status: 200,json: { id: 'pi_autenticacao',status: 'requires_payment_method', last_payment_error: { code: 'authentication_required' } } }]);
+    expect(await new StripePspProvider(consulta.cliente).consultar('pi_autenticacao')).toBe('pendente');
+  });
+  it('recusa após autenticação só libera nova cobrança depois de cancelar o PI antigo', async () => {
+    const { cliente,chamadas }=stripeDeMentira([
+      { status:200,json:{ id:'pi_auth',status:'requires_payment_method',last_payment_error:{ code:'card_declined' } } },
+      { status:200,json:{ id:'pi_auth',status:'canceled' } },
+    ]);
+    expect(await new StripePspProvider(cliente).consultar('pi_auth')).toBe('recusada');
+    expect(chamadas[1]?.url).toBe('https://api.stripe.com/v1/payment_intents/pi_auth/cancel');
+  });
+  it('cancelamento perdido não libera a cobrança enquanto puder ser paga', async () => {
+    const { cliente }=stripeDeMentira([
+      { status:200,json:{ id:'pi_auth',status:'requires_payment_method',last_payment_error:{ code:'card_declined' } } },
+      { status:500,json:{} },
+    ]);
+    await expect(new StripePspProvider(cliente).consultar('pi_auth')).rejects.toThrow();
+  });
+
+  it('autenticação sem PaymentIntent verificável não libera uma nova cobrança', async () => {
+    const { cliente } = stripeDeMentira([{ status: 402,json: { error: { code: 'authentication_required',payment_intent: { id: '../outro' } } } }]);
+    await expect(new StripePspProvider(cliente).cobrar(COBRANCA)).rejects.toMatchObject({ paymentIntentId: null });
+  });
+
+  it('recuperação antiga busca a identidade e consulta o mesmo PI sem criar cobrança', async () => {
+    const intent={ id:'pi_recuperado',status:'succeeded',amount:COBRANCA.valorCents,currency:'brl',
+      customer:COBRANCA.pspCustomerId,payment_method:COBRANCA.pspMethodId,livemode:false,
+      metadata:{ fatura_id:COBRANCA.faturaId,tenant_id:COBRANCA.tenantId,tentativa:'1' } };
+    const { cliente,chamadas }=stripeDeMentira([
+      { status:200,json:{ data:[intent],has_more:false } },{ status:200,json:intent },
+    ]);
+    expect(await new StripePspProvider(cliente).recuperar(COBRANCA)).toEqual({estado:'paga',chargeId:intent.id});
+    expect(chamadas).toHaveLength(2);
+    expect(decodeURIComponent(chamadas[0]?.url ?? '')).toContain("metadata['tentativa']:'1'");
+    expect(chamadas.every(c=>!c.corpo)).toBe(true);
+  });
+  it('busca vazia não cria e resultado de outra conta é recusado',async()=>{
+    const vazia=stripeDeMentira([{status:200,json:{data:[],has_more:false}}]);
+    expect(await new StripePspProvider(vazia.cliente).recuperar(COBRANCA)).toBeNull();
+    expect(vazia.chamadas).toHaveLength(1);
+    const alheia=stripeDeMentira([{status:200,json:{data:[{id:'pi_alheio',amount:COBRANCA.valorCents,currency:'brl',customer:'cus_outro'}],has_more:false}}]);
+    await expect(new StripePspProvider(alheia.cliente).recuperar(COBRANCA)).rejects.toThrow('stripe_tentativa_divergente');
+    expect(alheia.chamadas).toHaveLength(1);
+  });
+  it('recusa 402 com PI conserva a pendência quando ele já foi pago',async()=>{
+    const {cliente}=stripeDeMentira([
+      {status:402,json:{error:{code:'card_declined',payment_intent:{id:'pi_corrida'}}}},
+      {status:200,json:{id:'pi_corrida',status:'succeeded'}},
+    ]);
+    expect(await new StripePspProvider(cliente).cobrar(COBRANCA)).toMatchObject({estado:'paga',chargeId:'pi_corrida'});
   });
 
   it('cartão recusado é resposta, não exceção', async () => {
@@ -541,11 +606,9 @@ describe('o que a conta de verdade recusou', () => {
   });
 
   it('a cobrança de cartão nasce aguardando, não recusada', async () => {
-    // O estado inicial de todo PaymentIntent de cartão é
-    // `requires_payment_method`. Nascendo `recusado`, a conciliação encerraria
-    // a cobrança antes de o cliente abrir o link.
+    // O cliente precisa de uma URL para preencher e confirmar o cartão.
     const { cliente } = stripeDeMentira([
-      { status: 200, json: { id: 'pi_11', status: 'requires_payment_method' } },
+      { status: 200, json: { id: 'cs_11', payment_status: 'unpaid', url: 'https://checkout.stripe.com/c/pay/cs_11' } },
     ]);
 
     const criada = await new StripePaymentProvider(cliente).criarCobranca({
@@ -553,6 +616,13 @@ describe('o que a conta de verdade recusou', () => {
       meio: 'cartao',
     });
     expect(criada.estado).toBe('aguardando');
+    expect(criada.url).toBe('https://checkout.stripe.com/c/pay/cs_11');
+  });
+
+  it('checkout incompleto não deixa o cliente esperando sem poder pagar', async () => {
+    const { cliente } = stripeDeMentira([{ status: 200, json: { id: 'cs_sem_url', payment_status: 'unpaid' } }]);
+    await expect(new StripePaymentProvider(cliente).criarCobranca({ ...PEDIDO, meio: 'cartao' }))
+      .rejects.toThrow('URL do checkout');
   });
 
   it('e vira recusada quando a tentativa falhou', async () => {

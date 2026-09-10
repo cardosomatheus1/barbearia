@@ -1,0 +1,11 @@
+{
+  "name": "segredos-pre-publicacao",
+  "command": [
+    "node",
+    "scripts/verificar-segredos.mjs",
+    "--history"
+  ],
+  "started_utc": "2026-09-10T09:01:08.246745+00:00",
+  "duration_seconds": 3.19,
+  "exit_code": 0
+}

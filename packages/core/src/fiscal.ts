@@ -1,30 +1,10 @@
 /**
- * `FiscalProvider` — a abstração fiscal (bloco 53, SPEC §3.11 e §5.11).
- *
- * > *"**Decisão de arquitetura:** não implementar lógica municipal no core.
- * > Criar a abstração `FiscalProvider` e delegar a um emissor terceirizado.
- * > Motivo: são ~5.500 municípios com regras próprias. Absorver isso no core
- * > garante que o time passe a manter integração fiscal em vez de produto."*
- *
- * É a decisão mais importante deste bloco e ela está na SPEC em letras. O que
- * mora aqui é o **contrato** e o vocabulário de estado; o que sabe se Salvador
- * exige RPS numerado e São Paulo não é o emissor contratado.
- *
- * ## A emissão nunca bloqueia a venda
- *
- * É a mesma frase do KYC no bloco 50, e pela mesma razão. A prefeitura pode
- * levar minutos ou horas para autorizar, e pode estar fora do ar — o caminho
- * óbvio, recusar o fechamento da comanda até a nota sair, produz a barbearia
- * descobrindo no balcão, com o cliente na frente, que não consegue cobrar.
- *
- * A nota nasce `pendente`, a fila cuida dela, e o balcão vê o estado na comanda.
- *
- * ## Certificado digital não passa por aqui
- *
- * O A1 e a senha dele ficam **no emissor**, que tem obrigação regulatória de
- * guardá-los. Deste lado fica a referência opaca, exatamente como o token do
- * cartão e o id de recebedor do adquirente — e há invariante no banco que
- * reprova uma coluna de certificado ou senha em `fiscal_settings`.
+ * Contrato e vocabulário fiscal, sem banco, XML ou rede no core.
+ * O emissor próprio mora em finance/nfse: A1 cifrado por unidade, DPS nacional,
+ * recuperação por consulta e cancelamento por evento. A venda fecha antes da
+ * autorização; a fila preserva o estado até a resposta da autoridade.
+ * Cobertura municipal e tributária depende dos adaptadores implementados e
+ * homologados, nunca da simples presença de um código IBGE no cadastro.
  */
 
 import { foraDoSilencio } from './notificacao.js';
@@ -379,9 +359,12 @@ export interface NotaEmitida {
   readonly numero: string | null;
   readonly linkPdf: string | null;
   readonly motivoDaRecusa: string | null;
+  /** Só uma recusa explícita do cancelamento permite voltar a autorizada. */
+  readonly cancelamentoRecusado?: boolean;
 }
 
 export interface FiscalProvider {
+  validarMotivoDeCancelamento?(motivo: string): void;
   /**
    * `issueServiceInvoice(order, taxpayer) -> Invoice` da SPEC §3.11.
    *

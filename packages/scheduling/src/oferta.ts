@@ -11,7 +11,8 @@ import {
   type EstadoDaOferta,
   ESTADOS_QUE_LIBERAM_A_AGENDA,
 } from '@barbearia/core';
-import { agendarVencimentoDaOferta } from '@barbearia/jobs';
+import { agendarOfertaDaVaga, agendarVencimentoDaOferta } from '@barbearia/jobs';
+import { cifrarTokenDaOferta, decifrarTokenDaOferta } from './oferta-token.js';
 import { candidatosDaVaga, vagaDoCancelamento } from './espera.js';
 import { travarConfiguracaoDeRecursos, travarConfiguracaoDeServicos, travarConfiguracaoDoProfissional, travarDiaDaAgenda } from './concorrencia.js';
 import { loadDayContext } from './repository.js';
@@ -68,7 +69,7 @@ export interface OfertaCriada {
   readonly entryId: string;
   readonly customerId: string;
   readonly customerNome: string;
-  /** Em claro, **uma vez**: é o que vai na mensagem e não é gravado. */
+  /** Em claro só durante a entrega; o retry recupera a cifra temporária. */
   readonly token: string;
   readonly venceEm: Date;
   /** Data e hora locais da unidade, para a mensagem não repetir a conversão. */
@@ -113,6 +114,7 @@ async function recursosCabem(
     readonly locationId: string;
     readonly inicio: Date;
     readonly fim: Date;
+    readonly agora: Date;
     readonly recursos: readonly { resourceType: string; quantity: number }[];
   },
 ): Promise<boolean> {
@@ -140,7 +142,7 @@ async function recursosCabem(
                  AND shr.resource_type = rp.resource_type
                  AND h.starts_at < ${params.fim}
                  AND h.ends_at > ${params.inicio}
-                 AND h.expires_at > now()
+                 AND h.expires_at > ${params.agora}
             ), 0))::bigint AS usadas
       FROM resource_pools rp
      WHERE rp.location_id = ${params.locationId}::uuid
@@ -160,6 +162,7 @@ async function profissionalAindaLivre(
     readonly professionalId: string;
     readonly inicio: Date;
     readonly fim: Date;
+    readonly agora: Date;
   },
 ): Promise<boolean> {
   const linhas = await tx.$queryRaw<{ livre: boolean }[]>`
@@ -177,7 +180,7 @@ async function profissionalAindaLivre(
        WHERE h.professional_id = ${params.professionalId}::uuid
          AND h.starts_at < ${params.fim}
          AND h.ends_at > ${params.inicio}
-         AND h.expires_at > now()
+         AND h.expires_at > ${params.agora}
            ) AS livre
       FROM professionals p
      WHERE p.id = ${params.professionalId}::uuid
@@ -188,7 +191,7 @@ async function profissionalAindaLivre(
 
 async function profissionalTemCotaNoDia(
   tx: TransactionClient,
-  params: { readonly professionalId: string; readonly timezone: string; readonly dia: string },
+  params: { readonly professionalId: string; readonly timezone: string; readonly dia: string; readonly agora: Date },
 ): Promise<boolean> {
   const linhas = await tx.$queryRaw<{ daily_limit: number | null; usados: bigint }[]>`
     SELECT p.daily_limit,
@@ -201,7 +204,7 @@ async function profissionalTemCotaNoDia(
              SELECT 1 FROM slot_holds h
               WHERE h.professional_id = p.id
                 AND (h.starts_at AT TIME ZONE ${params.timezone})::date = ${params.dia}::date
-                AND h.expires_at > now()
+                AND h.expires_at > ${params.agora}
            ) AS compromissos)::bigint AS usados
       FROM professionals p WHERE p.id = ${params.professionalId}::uuid
   `;
@@ -233,6 +236,7 @@ export async function oferecerVaga(
     professionalId: params.professionalId,
     timezone: params.timezone,
     dia: diaDaVaga,
+    agora: params.agora,
   }))) return null;
 
   const vaga = vagaDoCancelamento({
@@ -298,6 +302,7 @@ export async function oferecerVaga(
       inicio: params.inicio,
       fim: params.fim,
       recursos,
+      agora: params.agora,
     }))) continue;
 
     const holds = await tx.$queryRaw<{ id: string }[]>`
@@ -451,6 +456,7 @@ async function vagaAindaExisteParaEntrada(
     locationId: params.locationId,
     serviceIds,
     date: params.dia,
+    now: params.agora,
     professionalId: params.professionalId,
     // Lista de espera pode recuperar cancelamento de última hora; antecedência
     // mínima é regra do autoatendimento, não deve matar a vaga transacional.
@@ -977,6 +983,13 @@ export async function vencerOfertas(
         timezone: vencida.timezone,
         exceto: jaTentadas.map((t) => t.entry_id),
       });
+      // A passagem ao próximo existe no mesmo commit do vencimento. Ela volta
+      // à fila normal para respeitar silêncio, recurso habilitado e retentativa.
+      await agendarOfertaDaVaga(tx, {
+        locationId:vencida.location_id,professionalId:vencida.professional_id,
+        inicio:vencida.starts_at,fim:vencida.ends_at,timezone:vencida.timezone,
+        agora,aposOfertaId:vencida.id,
+      });
     }
 
     return [...porVaga.values()];
@@ -1006,6 +1019,7 @@ export async function oferecerProximaVaga(params: {
   | (OfertaCriada & { readonly telefone: string | null; readonly barbearia: string })
   | null
 > {
+  if (params.inicio.getTime() <= params.agora.getTime()) return null;
   return withTenant(params.tenantId, async (tx) => {
     // O nome da barbearia sai daqui junto do fuso, e não de uma segunda ida ao
     // banco: quem manda a mensagem precisa dizer de quem ela é — sem isso o
@@ -1020,6 +1034,32 @@ export async function oferecerProximaVaga(params: {
     const barbearia = unidades[0]?.barbearia ?? '';
     if (!timezone) return null;
 
+    await travarDiaDaAgenda(tx,params.locationId,instantToLocal(timezone,params.inicio).date);
+    await travarConfiguracaoDoProfissional(tx,params.professionalId);
+    const [anterior]=await tx.$queryRaw<{
+      id:string;entry_id:string;customer_id:string;customer_nome:string;phone_e164:string|null;
+      delivery_token_cipher:string;token_hash:string;expires_at:Date;service_starts_at:Date;professional_name:string;
+    }[]>`SELECT o.id,o.entry_id,e.customer_id,c.name AS customer_nome,c.phone_e164,
+      o.delivery_token_cipher,o.token_hash,o.expires_at,o.service_starts_at,p.name AS professional_name
+      FROM waitlist_offers o JOIN waitlist_entries e ON e.id=o.entry_id
+      JOIN customers c ON c.id=e.customer_id JOIN professionals p ON p.id=o.professional_id
+      JOIN slot_holds h ON h.id=o.hold_id
+      WHERE e.location_id=${params.locationId}::uuid AND o.professional_id=${params.professionalId}::uuid
+        AND o.starts_at=${params.inicio} AND o.ends_at=${params.fim} AND o.status='aberta'
+        AND o.expires_at>${params.agora} AND h.expires_at>${params.agora}
+        AND e.status='waiting' AND c.anonymized_at IS NULL AND o.delivery_token_cipher IS NOT NULL
+        AND p.active AND p.kind IN ('professional','external')`;
+    if(anterior) {
+      const token=decifrarTokenDaOferta(anterior.delivery_token_cipher,params.tenantId,anterior.id);
+      if(hashDaOferta(token)!==anterior.token_hash)throw new Error('oferta_token_divergente');
+      const local=instantToLocal(timezone,anterior.service_starts_at);
+      return {id:anterior.id,entryId:anterior.entry_id,customerId:anterior.customer_id,customerNome:anterior.customer_nome,
+        telefone:anterior.phone_e164,barbearia,token,venceEm:anterior.expires_at,dia:local.date,hora:formatHHMM(local.minutes),
+        profissionalNome:anterior.professional_name};
+    }
+    const anteriores=await tx.$queryRaw<{entry_id:string}[]>`SELECT entry_id FROM waitlist_offers
+      WHERE professional_id=${params.professionalId}::uuid AND starts_at=${params.inicio}`;
+
     const oferta = await oferecerVaga(tx, {
       tenantId: params.tenantId,
       locationId: params.locationId,
@@ -1028,9 +1068,11 @@ export async function oferecerProximaVaga(params: {
       fim: params.fim,
       timezone,
       agora: params.agora,
-      ...(params.exceto ? { exceto: params.exceto } : {}),
+      exceto:[...new Set([...(params.exceto??[]),...anteriores.map(o=>o.entry_id)])],
     });
     if (!oferta) return null;
+    const cifra=cifrarTokenDaOferta(oferta.token,params.tenantId,oferta.id);
+    await tx.$executeRaw`UPDATE waitlist_offers SET delivery_token_cipher=${cifra} WHERE id=${oferta.id}::uuid`;
 
     // O vencimento na mesma transação da oferta: sem ele, quem não responde
     // segura o horário para sempre.

@@ -4,10 +4,11 @@ const ler = (p) => fs.readFileSync(p, 'utf8');
 const falhas = [];
 const exigir = (ok, mensagem) => { if (!ok) falhas.push(mensagem); };
 
-const promo = ler('packages/crm/src/disparo-promocional.ts');
+const promo = ler('packages/jobs/src/disparo-promocional.ts');
 const avulsa = ler('packages/crm/src/mensagem-avulsa.ts');
 const campanha = ler('packages/crm/src/campanha.ts');
 const automacao = ler('packages/crm/src/automacao.ts');
+const despacho = ler('packages/crm/src/automacao-despacho.ts');
 const mensagens = ler('packages/crm/src/whatsapp-mensagens.ts');
 const templates = ler('packages/crm/src/whatsapp-templates.ts');
 const meta = ler('packages/crm/src/whatsapp-meta.ts');
@@ -38,10 +39,10 @@ exigir(promo.includes('pg_advisory_xact_lock') && promo.includes('barberdock:pro
 exigir(promo.includes('notification_send_intents') && promo.includes('quota_date')
   && promo.includes("status IN ('sending', 'uncertain', 'sent')"),
   'cota promocional não usa ledger persistente em voo/incerto/enviado');
-exigir(promo.includes('WHERE tenant_id = ${params.tenantId}::uuid')
-  && promo.includes('ON CONFLICT (tenant_id, intent_key) DO NOTHING')
-  && promo.includes("tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid"),
-  'ledger promocional perdeu cardinalidade explícita tenant_id + intent_key');
+exigir(promo.includes('ON CONFLICT (tenant_id, intent_key) DO NOTHING')
+  && campanha.includes('withTenant(') && automacao.includes('withTenant(') && avulsa.includes('withTenant(')
+  && promo.includes('WHERE intent_key = ${params.intentKey}'),
+  'ledger promocional perdeu conflito composto ou isolamento por withTenant');
 exigir(promo.includes('instantToLocal(params.timeZone, params.agora).date')
   && promo.includes('TETO_PROMOCIONAL_MES'),
   'cota promocional perdeu dia local ou teto de 30 dias');
@@ -57,8 +58,8 @@ for (const [nome, fonte] of [['campanha', campanha], ['automação', automacao],
 exigir(campanha.includes('reservarDisparoPromocional(tx, {')
   && campanha.indexOf('reservarDisparoPromocional(tx, {') < campanha.indexOf('wamid = await params.enviar(alvo)'),
   'campanha voltou a chamar provedor antes de reservar cota');
-exigir(worker.includes('const nossa = await reservarDisparoDaAutomacao({')
-  && worker.indexOf('const nossa = await reservarDisparoDaAutomacao({') < worker.indexOf('await provider.enviarDeAutomacao'),
+exigir(worker.includes('despacharAutomacoes({') && despacho.includes('await reservarDisparoDaAutomacao({')
+  && despacho.indexOf('await reservarDisparoDaAutomacao({') < despacho.indexOf('await p.enviar(disparo)'),
   'worker voltou a chamar automação antes de reservar');
 exigir(automacao.includes('UPDATE automation_sends SET sent_at = ${params.agora}')
   && automacao.includes('confirmarDisparoDaAutomacao'),
@@ -78,7 +79,7 @@ exigir(mensagens.indexOf('const enviada = await pedido.provider.enviar') < mensa
   'persistência do wamid após sucesso Meta não vira desfecho ambíguo');
 exigir(avulsa.includes('marcarDisparoPromocionalIncerto')
   && campanha.includes('marcarDisparoPromocionalIncerto')
-  && worker.includes('marcarDisparoDaAutomacaoIncerto'),
+  && despacho.includes('marcarDisparoDaAutomacaoIncerto'),
   'algum caminho promocional perdeu tratamento de entrega incerta');
 
 // Template: escopo de unidade e claim antes da Meta.

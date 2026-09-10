@@ -59,4 +59,4 @@ export MFA_SECRET_KEY="${MFA_SECRET_KEY:-$(openssl rand -base64 32)}"
 # declara o modo — que é o que o interruptor existe para obrigar.
 export FISCAL_MODO="${FISCAL_MODO:-fake}"
 
-exec vitest run "$@"
+vitest run "$@"

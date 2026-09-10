@@ -1,12 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { adquirenteDoSplit, adquirenteDoClube, splitDisponivel } from './adquirente.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakePaymentProvider } from '@barbearia/core';
 import {
   adquirenteDaComanda,
   adquirenteDaPlataforma,
   modoDoAdquirente,
+  modoDaComanda,
+  cobrancaDaComandaDisponivel,
 } from './adquirente.js';
 import { FakePspProvider } from './psp.js';
-import { StripePaymentProvider, StripePspProvider } from './stripe-pagamento.js';
+import { StripePspProvider } from './stripe-pagamento.js';
+
+afterEach(() => vi.unstubAllEnvs());
 
 /**
  * A escolha do adquirente (bloco 34).
@@ -54,32 +59,31 @@ describe('o modo do adquirente', () => {
   });
 });
 
-describe('as duas pontas seguem o mesmo modo', () => {
+describe('Stripe cobra exclusivamente a assinatura SaaS', () => {
   it('sem adquirente, a plataforma não debita', () => {
     // É o comportamento do bloco 28: fatura emitida, quitação registrada à mão
     // pelo Super Admin a partir do extrato.
     expect(adquirenteDaPlataforma('nenhum')).toBeNull();
   });
 
-  it('o modo stripe liga as duas pontas de uma vez', () => {
-    /**
-     * O defeito que esta função existe para impedir: ligar a Stripe num
-     * processo e esquecer no outro — a régua debitando de verdade enquanto o
-     * estorno devolve dinheiro de mentira.
-     */
-    expect(adquirenteDaPlataforma('stripe')).toBeInstanceOf(StripePspProvider);
-    expect(adquirenteDaComanda('stripe')).toBeInstanceOf(StripePaymentProvider);
+  it('ativar Stripe não habilita cobrança nem estorno de comanda', async () => {
+    vi.stubEnv('PSP_MODO', 'stripe');
+    vi.stubEnv('COMANDA_PSP_MODO', 'nenhum');
+    expect(adquirenteDaPlataforma()).toBeInstanceOf(StripePspProvider);
+    expect(cobrancaDaComandaDisponivel()).toBe(false);
+    await expect(adquirenteDaComanda().estornar('pi_outra_conta')).rejects.toThrow('comanda_sem_adquirente');
+    expect(() => modoDaComanda('stripe')).toThrow(/exclusiva/);
   });
 
-  it('o modo fake liga as duas pontas de mentira', () => {
+  it('as simulações de assinatura e de comanda são escolhidas separadamente', () => {
     expect(adquirenteDaPlataforma('fake')).toBeInstanceOf(FakePspProvider);
     expect(adquirenteDaComanda('fake')).toBeInstanceOf(FakePaymentProvider);
   });
 
-  it('sem adquirente, o balcão ainda recebe uma resposta', () => {
-    // A assimetria é de propósito: a plataforma pode simplesmente não debitar,
-    // mas o balcão precisa de algo na tela.
-    expect(adquirenteDaComanda('nenhum')).toBeInstanceOf(FakePaymentProvider);
+  it('sem adquirente, consulta e cancelamento também falham explicitamente', async () => {
+    const provider = adquirenteDaComanda('nenhum');
+    await expect(provider.consultar('pi_1')).rejects.toThrow('comanda_sem_adquirente');
+    await expect(provider.cancelar('pi_1')).rejects.toThrow('comanda_sem_adquirente');
   });
 
   it('construir o provedor da Stripe não exige a chave — cobrar exige', async () => {
@@ -107,4 +111,12 @@ describe('as duas pontas seguem o mesmo modo', () => {
       if (anterior !== undefined) process.env['STRIPE_SECRET_KEY'] = anterior;
     }
   });
+  it('Stripe do SaaS não habilita cobrança do clube nem inventa cadastro de recebedor', async () => {
+    vi.stubEnv('PSP_MODO', 'stripe'); vi.stubEnv('COMANDA_PSP_MODO', 'nenhum');
+    expect(splitDisponivel()).toBe(false);
+    await expect(adquirenteDoSplit().consultarRecebedor('sintetico')).rejects.toThrow('split_sem_adquirente');
+    await expect(adquirenteDoClube().cobrar({ tenantId: 'sintetico', faturaId: 'sintetica', token: 'sintetico',
+      valorCents: 1000, tentativa: 1, descricao: 'Teste isolado', idempotencyKey: 'sintetica:1' })).rejects.toThrow('clube_sem_adquirente');
+  });
+
 });

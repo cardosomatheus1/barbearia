@@ -1,3 +1,4 @@
+import { cabecalhosDoVisitante } from './proxy-confiavel';
 /**
  * Timeout único para chamadas do Next à API.
  *
@@ -20,7 +21,9 @@ export async function fetchComTimeout(
   const timeout = AbortSignal.timeout(timeoutMs);
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   try {
-    return await fetch(input, { ...init, signal });
+    const cabecalhos = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
+    for (const [name, value] of Object.entries(await cabecalhosDoVisitante(input))) cabecalhos.set(name, value);
+    return await fetch(input, { ...init, headers: Object.fromEntries(cabecalhos), signal });
   } catch (erro) {
     if (timeout.aborted && !init.signal?.aborted) throw new ApiTimeoutError(timeoutMs);
     throw erro;

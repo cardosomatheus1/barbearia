@@ -31,6 +31,8 @@ import {
   salvarPacoteNaApi,
   reembolsarPacoteNaApi,
   trocarDePlano,
+  cadastrarCartaoDaAssinatura,
+  conciliarCartaoDaAssinatura,
   salvarPermissoesDoPapel,
   adicionarNaComanda,
   registrarConsentimentoNoBalcao,
@@ -285,6 +287,23 @@ export async function acaoTrocarDePlano(form: FormData): Promise<void> {
   redirect('/admin/plano?trocado=1');
 }
 
+export async function acaoCadastrarCartaoSaas(form: FormData): Promise<void> {
+  const token = await exigirSessao();
+  const r = await cadastrarCartaoDaAssinatura(token, form.get('consentiu') === 'on', texto(form, 'idempotencyKey'));
+  if (!r.ok) return falhar('/admin/plano', r);
+  const url = new URL(r.dados.url);
+  if (url.protocol !== 'https:' || url.hostname !== 'checkout.stripe.com' || url.username || url.password || url.port) {
+    redirect('/admin/plano?erro=checkout_invalido');
+  }
+  redirect(r.dados.url);
+}
+
+export async function acaoConciliarCartaoSaas(): Promise<void> {
+  const r = await conciliarCartaoDaAssinatura(await exigirSessao());
+  if (!r.ok) return falhar('/admin/plano', r);
+  redirect('/admin/plano?cartao=consultado');
+}
+
 // -- Permissões ---------------------------------------------------------------
 
 /**
@@ -513,4 +532,3 @@ export async function acaoVenderPacote(form: FormData): Promise<void> {
   if (!resultado.ok) return falhar(`/admin/comanda/${id}`, resultado);
   redirect(`/admin/comanda/${id}`);
 }
-

@@ -24,6 +24,10 @@ test('identidade atual cumpre guardas novas', () => {
 });
 
 const mutacoes = [
+  ...['STAFF_EMAIL_PEPPER', 'OTP_PEPPER', 'API_KEY_PEPPER'].map((nome) => [
+    `preflight sem ${nome}`, { preflight: fontes.preflight.replace(`'${nome}',`, '') },
+  ]),
+  ['preflight aceita segredo curto', { preflight: fontes.preflight.replace('segredo.length < 32', 'segredo.length < 8') }],
   ['OTP sem HMAC', { otp: fontes.otp.replace("createHmac('sha256', otpPepper())", "createHash('sha256')") }],
   ['cadastro com sessão fantasma', { controller: fontes.controller.replace('issueSession: false', 'issueSession: true') }],
   ['login bloqueado sem revogação', { controller: fontes.controller.replace('await revokeStaffSessionByToken(sessao.token);', '/* sem limpeza */') }],

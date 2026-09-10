@@ -693,7 +693,7 @@ export class CaixaController {
     if (!cobrancaDaComandaDisponivel()) {
       throw new DomainError(
         'psp_nao_configurado', 503,
-        'Cobranças online estão indisponíveis: configure PSP_MODO=fake para teste ou PSP_MODO=stripe em produção.',
+        'Cobrança online da comanda indisponível. Registre o pagamento recebido no caixa.',
       );
     }
 

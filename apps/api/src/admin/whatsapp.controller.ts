@@ -6,14 +6,14 @@ import {
   cadastroDoWhatsApp,
   conciliarWhatsAppDaUnidade,
   enviarMensagemAvulsa,
-  enviarPeloWhatsApp,
   EnvioAvulsoError,
   conectarPeloSignup,
-  provedorDoWhatsApp,
+  enviarNoCanalDaUnidade,
   signupNaTela,
   salvarCadastroDoWhatsApp,
   submeterTemplate,
   templatesDaUnidade,
+  BaileysError,
 } from '@barbearia/crm';
 import {
   type BotaoDaMensagem,
@@ -69,6 +69,7 @@ const STATUS_DO_SIGNUP: Record<string, number> = {
 };
 
 function toHttp(erro: unknown): never {
+  if (erro instanceof BaileysError) throw new DomainError(erro.code, erro.status, erro.message);
   if (erro instanceof WhatsAppError) {
     throw new DomainError(erro.code, STATUS[erro.code] ?? 400, erro.message);
   }
@@ -289,14 +290,6 @@ export class WhatsAppController {
       );
     }
     const local = await this.unidade(staff);
-    const zap = await provedorDoWhatsApp(staff.tenantId, local.id);
-    if (!zap) {
-      throw new DomainError(
-        'sem_canal',
-        409,
-        'O WhatsApp da casa ainda não está ligado, então nada chega ao cliente.',
-      );
-    }
 
     try {
       return await enviarMensagemAvulsa({
@@ -314,7 +307,8 @@ export class WhatsAppController {
         // "1" fariam a segunda ser recusada pelo envio da primeira.
         idempotencyKey: `${staff.staffUserId}:${idempotencyKey}`,
         enviar: async (destino) => {
-          const saiu = await enviarPeloWhatsApp({
+          const saiu = await enviarNoCanalDaUnidade({
+            intentKey: destino.intentKey,
             tenantId: staff.tenantId,
             locationId: local.id,
             // O tipo do **texto escolhido**, resolvido pelo domínio: aqui o
@@ -329,7 +323,6 @@ export class WhatsAppController {
             variaveis: [destino.clienteNome, destino.barbearia],
             customerId: body.customerId,
             appointmentId: null,
-            provider: zap,
           });
           return saiu?.wamid ?? null;
         },

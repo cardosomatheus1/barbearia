@@ -4,8 +4,10 @@ import {
   documentoDoTomadorValido,
   normalizarDocumento,
 } from '@barbearia/core';
+import { executarEntregaDuravel, type MensagemDeNota } from '@barbearia/jobs';
 import { audit } from '@barbearia/identity';
 import { recusar } from './fiscal-erros.js';
+import { urlDoDocumento } from './nfse/link.js';
 
 export async function salvarDocumentoDoCliente(params: {
   readonly tenantId: string;
@@ -52,6 +54,8 @@ export async function salvarDocumentoDoCliente(params: {
 }
 
 export interface NotaAEntregar {
+  readonly locationId: string;
+  readonly customerId: string;
   readonly id: string;
   readonly linkPdf: string;
   readonly numero: string | null;
@@ -77,22 +81,27 @@ export interface NotaAEntregar {
 export async function notasAEntregar(
   tenantId: string,
   limite = 50,
+  agora = new Date(),
 ): Promise<readonly NotaAEntregar[]> {
   return withTenant(tenantId, async (tx) => {
     const linhas = await tx.$queryRaw<
       {
         id: string;
+        customer_id: string;
         pdf_url: string;
         number: string | null;
         phone_e164: string;
         name: string;
         timezone: string;
         barbearia: string;
+        location_id: string;
+        pdf_nativo: boolean;
       }[]
     >`
-      SELECT f.id, f.pdf_url, f.number, c.phone_e164, c.name, l.timezone,
-             t.name AS barbearia
+      SELECT f.id, c.id AS customer_id, f.pdf_url, f.number, c.phone_e164, c.name, l.timezone,
+             t.name AS barbearia, f.location_id, (d.pdf_cipher IS NOT NULL) AS pdf_nativo
         FROM fiscal_invoices f
+        LEFT JOIN fiscal_native_documents d ON d.invoice_id = f.id
         JOIN orders o ON o.id = f.order_id
         JOIN customers c ON c.id = o.customer_id
         JOIN locations l ON l.id = f.location_id
@@ -106,7 +115,9 @@ export async function notasAEntregar(
     `;
     return linhas.map((l) => ({
       id: l.id,
-      linkPdf: l.pdf_url,
+      locationId: l.location_id, customerId: l.customer_id,
+      // O prazo começa na tentativa de entrega, mesmo após semanas sem canal.
+      linkPdf: l.pdf_nativo ? urlDoDocumento({ tenantId, locationId: l.location_id, invoiceId: l.id }, agora) : l.pdf_url,
       numero: l.number,
       telefone: l.phone_e164,
       clienteNome: l.name,
@@ -116,19 +127,7 @@ export async function notasAEntregar(
   });
 }
 
-/**
- * Carimba a entrega, e devolve se **esta** chamada foi quem entregou.
- *
- * O carimbo é gravado antes de a mensagem sair, e a ordem é deliberada: a
- * alternativa — mandar e depois carimbar — perde o carimbo se o processo cair
- * no meio, e a volta seguinte da fila remanda a mesma nota. Entre repetir a
- * mensagem e não mandá-la, o produto escolhe não mandar: o link continua na
- * tela da comanda, e a recepção manda quando o cliente pedir.
- *
- * `customer_notified_at IS NULL` no `WHERE` é o que impede a segunda entrega
- * quando dois workers pegam a mesma nota — e a contagem é conferida, porque um
- * `UPDATE` que não pegou ninguém significa que outro já mandou.
- */
+/** Carimba somente depois de confirmar o envio ou reencontrar uma intenção confirmada. */
 export async function marcarNotaEntregue(params: {
   readonly tenantId: string;
   readonly invoiceId: string;
@@ -145,34 +144,13 @@ export async function marcarNotaEntregue(params: {
   });
 }
 
-/**
- * Entrega as notas autorizadas de uma barbearia (bloco 54).
- *
- * Roda **pela fila**, uma volta por barbearia por hora. Cada nota decide
- * sozinha em `packages/core` — a janela de silêncio é do fuso da unidade, e o
- * horário do laço é UTC.
- *
- * Uma consulta para o conjunto e nenhuma dentro do laço: o telefone, o nome e o
- * fuso já vêm no `JOIN`. O laço só carimba e manda.
- *
- * O carimbo vem **antes** da mensagem, e é a decisão que importa aqui: mandar e
- * depois carimbar perde o carimbo se o processo cair, e a volta seguinte
- * remanda a mesma nota. Entre repetir e não mandar, o produto escolhe não
- * mandar — o link continua na comanda, e a recepção manda quando o cliente
- * pedir. A escolha inversa transformaria uma queda do worker em vinte
- * mensagens iguais no celular do cliente.
- */
+/** A fila de entrega reserva cada nota antes da rede e respeita o horário da unidade. */
 export async function entregarNotasAutorizadas(params: {
   readonly tenantId: string;
   readonly agora: Date;
-  readonly enviar: (mensagem: {
-    readonly phoneE164: string;
-    readonly barbearia: string;
-    readonly numero: string | null;
-    readonly link: string;
-  }) => Promise<void>;
+  readonly enviar: (mensagem: MensagemDeNota) => Promise<void>;
 }): Promise<{ readonly enviadas: number; readonly adiadas: number }> {
-  const notas = await notasAEntregar(params.tenantId);
+  const notas = await notasAEntregar(params.tenantId, 50, params.agora);
   let enviadas = 0;
   let adiadas = 0;
 
@@ -199,15 +177,14 @@ export async function entregarNotasAutorizadas(params: {
       continue;
     }
 
-    const nossa = await marcarNotaEntregue({ tenantId: params.tenantId, invoiceId: nota.id });
-    if (!nossa) continue;
-
-    await params.enviar({
-      phoneE164: nota.telefone,
-      barbearia: nota.barbearia,
-      numero: nota.numero,
-      link: nota.linkPdf,
-    });
+    const intentKey = `nota:${nota.id}`;
+    const enviada = await executarEntregaDuravel({ tenantId: params.tenantId, intentKey,
+      customerId: nota.customerId, tipo: 'nota_fiscal', telefone: nota.telefone, agora: params.agora,
+      enviar: () => params.enviar({ tenantId: params.tenantId, locationId: nota.locationId,
+        intentKey, customerId: nota.customerId, phoneE164: nota.telefone,
+        barbearia: nota.barbearia, numero: nota.numero, link: nota.linkPdf }) });
+    if (!enviada) { adiadas += 1; continue; }
+    await marcarNotaEntregue({ tenantId: params.tenantId, invoiceId: nota.id });
     enviadas += 1;
   }
 

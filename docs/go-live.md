@@ -77,10 +77,11 @@ Nenhum deles falhou por acaso, e nenhum dos três achados aparecia no portão:
 
 ### 1.2 As integrações reais — certificação atual
 
-O código contém providers reais para identidade Meta, WhatsApp CRM e Stripe. O
-ROADMAP registra exercício histórico da Stripe em test mode, mas o head `0117`
-ainda precisa de uma evidência reproduzível com as contas atuais. Fiscal e split
-não possuem provider real; nesses dois casos não basta preencher credenciais.
+O código integra Meta e Stripe para a assinatura SaaS; Baileys é uma alternativa
+por unidade, com textos locais e outbox. Os ensaios atuais de Stripe/Baileys usam
+rede simulada e não homologam contas ou números reais. Fiscal próprio tem cobertura
+parcial no padrão nacional, sem homologação externa nem cobertura universal.
+Split não possui adquirente real. Preencher credenciais não fecha essas lacunas.
 
 O padrão seguro continua sendo **não ligar o que não foi certificado**:
 
@@ -89,13 +90,13 @@ O padrão seguro continua sendo **não ligar o que não foi certificado**:
 | OTP/primeiro acesso | `IDENTITY_MESSAGING_MODO` | `console` é aceito em produção **enquanto nenhuma unidade exigir OTP** — `verificar-otp-entregavel.mjs` pergunta ao banco depois das migrações e recusa o deploy no dia em que alguém ligar a exigência | WABA central, número, dois templates aprovados e entrega real em aparelho. A senha de primeiro acesso não depende disso: ela aparece na tela |
 | Proteção anti-bot | `BOT_PROTECTION_MODO` | `turnstile` — exige as três chaves | conta na Cloudflare e as chaves no `.env`. `nenhum` assume a pendência por escrito e deixa `POST /admin/signup` sem proteção |
 | Adquirente | `PSP_MODO` | `nenhum` | conta contratada na Stripe e smoke atual de cobrança/webhook/estorno |
-| Fiscal | **recurso da plataforma** + `FISCAL_MODO` | desligado | implementar e contratar emissor real (a regra municipal **não** entra no código, SPEC §5.11) |
+| Fiscal | **recurso da plataforma** + `FISCAL_MODO` | desligado | emissor nacional próprio parcial; validar regimes, municípios, A1 e homologação |
 | WhatsApp CRM | cadastro por barbearia | sem número | conta Meta, empresa verificada, Embedded Signup e templates reais |
-| Split | provider montado no Worker | fake, com repasse recusado | implementar provider real, contratar split e concluir KYC dos recebedores |
+| Split | `COMANDA_PSP_MODO` | indisponível; fake só em teste | adquirente da loja e KYC; a Stripe do SaaS não recebe pagamentos dos clientes |
 
 Com o padrão, o produto opera: a plataforma fatura e o Super Admin registra o
-que viu no extrato (bloco 28), a nota **não aparece**, e o aviso cai no canal de
-reserva.
+que viu no extrato (bloco 28). Aviso sem canal configurado permanece pendente;
+uma linha no console não é prova de entrega.
 
 #### O fiscal tem dois interruptores, e eles respondem coisas diferentes
 
@@ -118,7 +119,7 @@ existe** para o outro lado — é a mesma razão de a guarda responder 404 e nã
 
 | Ensaio | Resultado | Medido em |
 |---|---|---|
-| Restauração de backup — medição histórica | **14s** para 8.000 clientes / dump de 2,1 MB. Naquele head, conferiu 123 tabelas por contagem, 147 políticas de RLS, `FORCE` em 121, constraints de exclusão, gatilhos, checks e a versão do schema | `scripts/ensaio-de-restauracao.sh`; precisa ser repetido no head `0117` antes do go-live |
+| Restauração de backup — medição histórica | **14s** para 8.000 clientes / dump de 2,1 MB. Naquele head, conferiu 123 tabelas por contagem, 147 políticas de RLS, `FORCE` em 121, constraints de exclusão, gatilhos, checks e a versão do schema | `scripts/ensaio-de-restauracao.sh`; precisa ser repetido no head atual antes do go-live |
 | Migrações 0079–0081 sobre volume | **153 ms, 131 ms, 48 ms** com 400 mil linhas nas tabelas que elas alteram (troca de chave estrangeira e de constraint) | banco descartável com volume gerado |
 
 O ensaio de restauração pergunta ao **banco restaurado**, não ao código de saída
@@ -277,7 +278,7 @@ mas falta profundidade, e o HSTS cobre o primeiro acesso antes de o
 ## 4. Go / no-go
 
 - [x] Os 10 percursos definidos estão ligados à medição
-- [ ] Os 10 percursos executados e verdes no head `0117`
+- [ ] Os 10 percursos executados e verdes no head atual
 - [ ] Percursos críticos complementares: cancelar/remarcar, espera, walk-in,
       pacote/assinatura, multiunidade, estorno e WhatsApp real
 - [ ] Carga destrutiva: 100 reservas no mesmo slot, 1 sucesso, 99 conflitos e zero 500

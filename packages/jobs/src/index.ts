@@ -14,3 +14,9 @@ export * from './whatsapp-conciliacao.js';
 export * from './webhook.js';
 
 export * from './observabilidade.js';
+
+export * from './notificacao-desfecho.js';
+
+export * from './entrega-duravel.js';
+
+export * from './disparo-promocional.js';

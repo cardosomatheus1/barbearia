@@ -8,23 +8,29 @@ Monorepo TypeScript.
 
 ## Estado atual
 
-Primeira fatia: **domínio Scheduling** — o motor de agendamento e as garantias de
-integridade do banco.
+Agenda, operação da barbearia e administração do SaaS em um monorepo.
+A auditoria e a validação de lançamento estão em andamento; a matriz do ROADMAP
+separa implementação, testes e operação externa.
+
+Stripe recebe somente as assinaturas do SaaS. WhatsApp permite Meta ou Baileys
+por unidade; Baileys tem textos locais, sem aprovação Meta. O fiscal usa um
+emissor próprio do padrão nacional, ainda com cobertura parcial e sem homologação
+externa. Configuração, evidências e pendências: [correções pré-go-live](output/CORRECOES_PRE_GO_LIVE.md).
 
 | Pacote | O que é | Estado |
 |---|---|---|
-| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão (com a taxa do adquirente), permissões, o vocabulário das transições e a régua de cobrança — lógica pura, sem banco e sem relógio | 596 testes ✅ |
-| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | 186 invariantes + 10 testes ✅ |
-| `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | 135 testes ✅ |
-| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, permissões editáveis por papel, segundo fator (TOTP), convite do barbeiro e auditoria | 137 testes ✅ |
-| `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | 23 testes ✅ |
-| `packages/finance` | Comanda, checkout, caixa, fiado, comissão e a **cobrança online** (Pix, cartão e link pelo adquirente, com webhook e conciliação) — o dinheiro e os números do barbeiro, do banco para a tela | 130 testes ✅ |
-| `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática, apuração diária, varredura de retenção e varredura de alerta — o que acontece sem ninguém esperando | 67 testes ✅ |
-| `packages/crm` | A ficha do cliente, a importação de base e os direitos do titular: consentimento com histórico, exportação, anonimização e retenção | 88 testes ✅ |
-| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin, suporte assistido, papéis internos, o canal de alerta ao dono e o cliente Stripe das duas pontas | 149 testes ✅ |
-| `packages/ui` | Design system: tokens, tema, componentes acessíveis | 85 testes ✅ |
-| `apps/api` | API pública, do painel, **da plataforma** e os **dois** webhooks de adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano, cobrança por Pix, direitos do titular e anonimização (LGPD) e o Super Admin | 375 testes ✅ |
-| `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | 81 testes ✅ |
+| `packages/core` | Motor de disponibilidade, vida do atendimento, fila, exceções, comanda, comissão (com a taxa do adquirente), permissões, o vocabulário das transições e a régua de cobrança — lógica pura, sem banco e sem relógio | Suíte incluída em `pnpm verify` |
+| `packages/db` | Schema, migrações, RLS e cliente com escopo de tenant | Suíte incluída em `pnpm verify` |
+| `packages/scheduling` | Repositórios, disponibilidade, reserva, o dia do balcão, a fila e a agenda | Suíte incluída em `pnpm verify` |
+| `packages/identity` | OTP, sessão do cliente e do gestor, contas de equipe, permissões editáveis por papel, segundo fator (TOTP), convite do barbeiro e auditoria | Suíte incluída em `pnpm verify` |
+| `packages/catalog` | CRUD do cadastro: serviços, combos, equipe, jornadas e recursos | Suíte incluída em `pnpm verify` |
+| `packages/finance` | Comanda, checkout, caixa, fiado, comissão e a **cobrança online** (Pix, cartão e link pelo adquirente, com webhook e conciliação) — o dinheiro e os números do barbeiro, do banco para a tela | Suíte incluída em `pnpm verify` |
+| `packages/jobs` | Fila de trabalho, avisos ao cliente, falta automática, apuração diária, varredura de retenção e varredura de alerta — o que acontece sem ninguém esperando | Suíte incluída em `pnpm verify` |
+| `packages/crm` | A ficha do cliente, a importação de base e os direitos do titular: consentimento com histórico, exportação, anonimização e retenção | Suíte incluída em `pnpm verify` |
+| `packages/platform` | A camada de plataforma: planos, assinatura, cobrança, adquirente e conciliação, bloqueio de conta, métricas globais, recursos ligáveis, segundo fator do Super Admin, suporte assistido, papéis internos, o canal de alerta ao dono e Stripe exclusiva da assinatura SaaS | Suíte incluída em `pnpm verify` |
+| `packages/ui` | Design system: tokens, tema, componentes acessíveis | Suíte incluída em `pnpm verify` |
+| `apps/api` | API pública, do painel, **da plataforma** e os **dois** webhooks de adquirente: perfil, disponibilidade, login, agendamento, balcão, fila, agenda, equipe, cadastro, caixa, comanda, comissão, avisos, ficha do cliente, metas, plano, cobrança por Pix, direitos do titular e anonimização (LGPD) e o Super Admin | Suíte incluída em `pnpm verify` |
+| `apps/web` | Página pública, fluxo do cliente, painel da barbearia e **painel da plataforma** (`/plataforma`), com SSR (Next.js) | Suíte incluída em `pnpm verify` |
 | `apps/worker` | O segundo processo: consome a fila, manda os avisos, marca a falta, apura as métricas do dia e varre a retenção de dado pessoal | — |
 
 Três dos testes de `core` são **guardas de arquitetura**: falham se alguém der

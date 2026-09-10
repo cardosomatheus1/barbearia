@@ -258,6 +258,7 @@ describeIfDb('direitos do titular', () => {
       // inclui saber se a mensagem que vocês mandaram chegou.
       'whatsapp_inbound',
       'whatsapp_messages',
+      'whatsapp_baileys_outbox',
       // A recusa de marcação online (bloco 60). É decisão sobre o titular,
       // tomada a partir do histórico dele: o fato sai, o score e o limiar não —
       // eles são internos por regra da SPEC §2.13.
@@ -320,6 +321,7 @@ describeIfDb('direitos do titular', () => {
        * mesma razão pela qual `customer_sessions` fica de fora desde o bloco 31.
        */
       ['locations', 'telefone da loja, não do cliente'],
+      ['whatsapp_baileys_sessions', 'número conectado da loja; credenciais e QR não integram a exportação do cliente'],
       ['professionals', 'telefone de quem trabalha na casa'],
       ['staff_users', 'telefone de quem trabalha na casa'],
       ['otp_challenges', 'credencial viva de 5 minutos, como customer_sessions — e apagada por anonimizar_cliente'],

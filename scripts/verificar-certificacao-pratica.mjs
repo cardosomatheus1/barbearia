@@ -64,8 +64,9 @@ exigir(
     && goLive.includes('100 reservas no mesmo slot')
     && goLive.includes('Cobertura que ainda falta no navegador')
     && goLive.includes('cancelamento e remarcação pelo cliente')
-    && goLive.includes('Fiscal e split')
-    && goLive.includes('não possuem provider real'),
+    && goLive.includes('Fiscal próprio tem cobertura')
+    && goLive.includes('sem homologação externa nem cobertura universal')
+    && goLive.includes('Split não possui adquirente real'),
   'go-live voltou a usar contagem histórica ou a prometer providers/carga não certificados',
 );
 exigir(

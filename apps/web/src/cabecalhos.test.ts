@@ -82,6 +82,16 @@ describe('a política de conteúdo da tela', () => {
     }
   });
 
+  it('autenticação Stripe só pode carregar na página do plano', () => {
+    const csp = pedir('/admin/plano').headers.get('content-security-policy') ?? '';
+    expect(csp).toContain('https://js.stripe.com'); expect(csp).toContain('https://api.stripe.com');
+    expect(csp).toContain('frame-src https://js.stripe.com https://hooks.stripe.com');
+    expect(csp).not.toContain('unsafe-eval');
+    for (const rota of ['/admin/whatsapp','/admin/dia','/admin/plano/qualquer','/domari']) {
+      expect(pedir(rota).headers.get('content-security-policy')).not.toContain('stripe.com');
+    }
+  });
+
   it('a foto que a barbearia cadastra continua carregando', () => {
     /**
      * `img-src` é a única diretiva larga, e é decisão de produto: a foto do

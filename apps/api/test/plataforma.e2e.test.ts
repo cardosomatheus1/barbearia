@@ -1,11 +1,11 @@
 import 'reflect-metadata';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { emailKey, hashPassword } from '@barbearia/identity';
 import {
   confirmarCadastroDoSegundoFator,
@@ -21,6 +21,8 @@ import { FilaPublicaController } from '../src/booking/fila-publica.controller.js
 import { SuporteInterceptor } from '../src/admin/suporte.interceptor.js';
 import { OnboardingController, StaffAuthController } from '../src/admin/admin.controller.js';
 import { FiscalController } from '../src/admin/fiscal.controller.js';
+import { FiscalNacionalController } from '../src/admin/fiscal-nacional.controller.js';
+import { certificadoNfseSintetico, CNPJ_TESTE_NFSE } from '../../../packages/finance/test/nfse-fixtures.js';
 import { MeController } from '../src/admin/team.controller.js';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { guardarCorpoCru } from '../src/common/corpo-cru.js';
@@ -33,6 +35,7 @@ import {
   salvarMeioDePagamento,
 } from '@barbearia/platform';
 import { PlanoController } from '../src/admin/plano.controller.js';
+import { StripeWebhookController } from '../src/plataforma/stripe-webhook.controller.js';
 import { StaffGuard } from '../src/admin/staff.guard.js';
 import { PermissaoGuard } from '../src/admin/permissao.guard.js';
 import {
@@ -255,8 +258,10 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
         // prova que o recurso desligado tira a tela do ar **e** some do menu.
         OnboardingController,
         FiscalController,
+        FiscalNacionalController,
         MeController,
         PlanoController,
+        StripeWebhookController,
         WebhookDoPspController,
         BoardController,
         SessoesController,
@@ -295,6 +300,8 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
     await app?.close();
     await admin?.$disconnect();
   });
+
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
   it('a porta da plataforma recusa quem não tem sessão', async () => {
     await http().get('/v1/plataforma/barbearias').expect(401);
@@ -710,6 +717,44 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
       .expect(200);
   });
 
+  it('NFS-e própria cadastra A1 pela API sem reexpor segredo e exige recurso, permissão e unidade da sessão', async () => {
+    vi.stubEnv('FISCAL_SECRET_KEY', Buffer.alloc(32, 27).toString('base64'));
+    const token = await tokenDoDono(); const plataforma = await tokenDaPlataforma();
+    const path = '/v1/admin/fiscal/nacional';
+    await http().get(path).expect(401);
+    await http().get(path).set('authorization', `Bearer ${token}`).expect(404);
+    await http().put(`/v1/plataforma/barbearias/${DOMARI}/recursos`).set('authorization', `Bearer ${plataforma}`)
+      .send({ code: 'fiscal', ligado: true }).expect(200);
+    try {
+      await http().put('/v1/admin/fiscal/configuracao').set('authorization', `Bearer ${token}`)
+        .send({ cnpj: CNPJ_TESTE_NFSE, regime: 'mei', codigoDeServico: '060101', issBps: 0,
+          municipioIbge: '2927408', emitirAutomaticamente: false }).expect(200);
+      const config = { ambiente: 'homologacao', serie: 1, codigoNacional: '060101', codigoMunicipal: null,
+        nbs: null, aliquotaTotalSimplesBps: null, habilitada: true };
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send({ ...config, locationId: LOCAL_VIZINHA }).expect(400);
+      await http().put(`${path}/configuracao`).set('authorization', `Bearer ${token}`).send(config).expect(200);
+      await http().post(`${path}/certificado`).set('authorization', `Bearer ${token}`).send({ arquivo: 'AAAA', senha: 'incorreta' }).expect(400);
+      const cred = certificadoNfseSintetico();
+      await http().post(`${path}/certificado`).set('authorization', `Bearer ${token}`)
+        .send({ arquivo: cred.pfx.toString('base64'), senha: cred.senha }).expect(201);
+      const status = await http().get(path).set('authorization', `Bearer ${token}`).expect(200);
+      expect(status.body.pronta).toBe(true);
+      expect(JSON.stringify(status.body).includes(cred.senha)).toBe(false);
+      expect(JSON.stringify(status.body).includes(cred.pfx.toString('base64'))).toBe(false);
+      await http().get(`${path}/notas/${LOCAL_VIZINHA}/xml`).set('authorization', `Bearer ${token}`).expect(404);
+      await admin.$executeRaw`DELETE FROM role_permissions WHERE tenant_id = ${DOMARI}::uuid AND role = 'owner' AND permission = 'fiscal.settings'`;
+      try { await http().get(path).set('authorization', `Bearer ${token}`).expect(403); }
+      finally { await admin.$executeRaw`INSERT INTO role_permissions (tenant_id, role, permission) VALUES (${DOMARI}::uuid, 'owner', 'fiscal.settings') ON CONFLICT DO NOTHING`; }
+      await http().delete(`${path}/certificado`).set('authorization', `Bearer ${token}`).expect(200);
+      const removido = await http().get(path).set('authorization', `Bearer ${token}`).expect(200);
+      expect(removido.body.certificado).toBeNull(); expect(removido.body.pronta).toBe(false);
+    } finally {
+      await http().put(`/v1/plataforma/barbearias/${DOMARI}/recursos`).set('authorization', `Bearer ${plataforma}`)
+        .send({ code: 'fiscal', ligado: false }).expect(200);
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('recurso que o código não conhece morre na borda', async () => {
     const token = await tokenDaPlataforma();
     await http()
@@ -1020,6 +1065,120 @@ describeIfDb('bloqueio de conta pela plataforma', () => {
   });
 
   // -- assinatura (bloco 27) -------------------------------------------------
+
+  it('3DS autentica a mesma fatura, isola barbearias e aguarda confirmação real do adquirente', async () => {
+    const token = await tokenDoDono(); const faturaId = '12300000-0000-4000-8000-000000000010';
+    const [antes] = await admin.$queryRaw<{ status: string }[]>`SELECT status FROM subscriptions WHERE tenant_id=${DOMARI}::uuid`;
+    if (!antes) throw new Error('assinatura da fixture ausente');
+    vi.stubEnv('PSP_MODO','stripe'); vi.stubEnv('STRIPE_SECRET_KEY','sk_test_sintetico');
+    vi.stubEnv('STRIPE_PUBLISHABLE_KEY','pk_test_sintetico'); vi.stubEnv('STRIPE_WEBHOOK_SECRET','whsec_sintetico');
+    await admin.$executeRaw`INSERT INTO invoices(id,tenant_id,kind,plan_code,amount_cents,period_start,period_end,due_at,psp_charge_id)
+      VALUES (${faturaId}::uuid,${DOMARI}::uuid,'proration','pro',4900,now(),now()+interval '1 day',now(),'pi_autenticacao')`;
+    await admin.$executeRaw`INSERT INTO billing_customers(tenant_id,psp_customer_id,psp_method_id,last4)
+      VALUES (${DOMARI}::uuid,'cus_autenticacao','pm_autenticacao','4242')`;
+    let status='requires_payment_method';
+    const rede=vi.spyOn(globalThis,'fetch').mockImplementation(async (url,init) => {
+      expect(init?.method).toBe('GET');
+      if (String(url).endsWith('/payment_methods/pm_autenticacao')) return Response.json({ id:'pm_autenticacao',type:'card',customer:'cus_autenticacao' });
+      if (String(url).endsWith('/payment_intents/pi_autenticacao')) return Response.json({ id:'pi_autenticacao',status,
+        customer:'cus_autenticacao',amount:4900,currency:'brl',payment_method:'pm_autenticacao',livemode:false,
+        client_secret:'pi_autenticacao_secret_sintetico',metadata:{ tenant_id:DOMARI,fatura_id:faturaId },last_payment_error:{ code:'authentication_required' } });
+      throw new Error('Chamada Stripe inesperada');
+    });
+    const rota=`/v1/admin/plano/faturas/${faturaId}/autenticacao`;
+    try {
+      await http().get(rota).expect(401);
+      await http().get('/v1/admin/plano/faturas/invalido/autenticacao').set('authorization',`Bearer ${token}`).expect(400);
+      await http().get(`/v1/admin/plano/faturas/${VIZINHA}/autenticacao`).set('authorization',`Bearer ${token}`).expect(404);
+      expect(rede).not.toHaveBeenCalled();
+      const resposta=await http().get(rota).set('authorization',`Bearer ${token}`).expect(200);
+      expect(resposta.headers['cache-control']).toBe('no-store');
+      expect(resposta.body).toMatchObject({ estado:'autenticar',clientSecret:'pi_autenticacao_secret_sintetico' });
+      const evento = async (id: string,tipo: string) => {
+        const cru=JSON.stringify({ id,type:tipo,data:{ object:{ id:'pi_autenticacao',metadata:{ tenant_id:DOMARI,fatura_id:faturaId },last_payment_error:{ code:'authentication_required' } } } });
+        const tempo=Math.floor(Date.now()/1000); const assinatura=createHmac('sha256','whsec_sintetico').update(`${tempo}.${cru}`).digest('hex');
+        return http().post('/v1/webhooks/stripe').set('content-type','application/json').set('stripe-signature',`t=${tempo},v1=${assinatura}`).send(cru).expect(201);
+      };
+      await evento('evt_auth_pendente','payment_intent.payment_failed');
+      expect(await admin.$queryRaw`SELECT status,psp_charge_id FROM invoices WHERE id=${faturaId}::uuid`).toEqual([{ status:'open',psp_charge_id:'pi_autenticacao' }]);
+      status='succeeded';
+      // Até um evento antigo de falha observa o estado atual pago; não libera nova tentativa.
+      expect((await evento('evt_auth_atrasado','payment_intent.payment_failed')).body.desfecho).toBe('paid');
+      expect((await evento('evt_auth_sucesso','payment_intent.succeeded')).body.desfecho).toBe('ignorado');
+      expect((await http().get(rota).set('authorization',`Bearer ${token}`).expect(200)).body.estado).toBe('concluida');
+      expect(await admin.$queryRaw`SELECT status FROM subscriptions WHERE tenant_id=${DOMARI}::uuid`).toEqual([{ status: 'active' }]);
+    } finally {
+      await admin.$executeRaw`DELETE FROM invoices WHERE id=${faturaId}::uuid`;
+      await admin.$executeRaw`DELETE FROM billing_customers WHERE tenant_id=${DOMARI}::uuid`;
+      // Esta suíte compartilha a conta entre os cenários. O webhook pago ativa
+      // a assinatura; remover só a fatura deixava o próximo teste fora do trial.
+      await admin.$executeRaw`UPDATE subscriptions SET status=${antes.status}::subscription_status WHERE tenant_id=${DOMARI}::uuid`;
+    }
+  });
+
+  it('dono cadastra cartão SaaS no checkout e só o webhook confirmado libera a cobrança', async () => {
+    const token = await tokenDoDono();
+    vi.stubEnv('PSP_MODO', 'stripe');
+    vi.stubEnv('STRIPE_SECRET_KEY', 'ficticia-rede-simulada');
+    vi.stubEnv('STRIPE_WEBHOOK_SECRET', 'segredo-ficticio-do-cadastro-saas');
+    vi.stubEnv('WEB_URL', 'https://app.example.com');
+    let cadastroId = '';
+    let consultaForaDoAr=false;
+    const sessao = () => ({ id: 'cs_cadastro', mode: 'setup', status: 'complete',
+      customer: 'cus_cadastro', client_reference_id: cadastroId, setup_intent: 'seti_cadastro',
+      payment_intent: null, metadata: { cadastro_id: cadastroId, tenant_id: DOMARI } });
+    const rede = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path === '/v1/customers' || path === '/v1/customers/cus_cadastro') {
+        return Response.json({ id: 'cus_cadastro', metadata: { tenant_id: DOMARI } });
+      }
+      if (path === '/v1/checkout/sessions' && init?.method === 'POST') {
+        const body = new URLSearchParams(String(init.body));
+        expect(body.get('mode')).toBe('setup');
+        cadastroId = body.get('client_reference_id')!;
+        return Response.json({ ...sessao(), status: 'open', url: 'https://checkout.stripe.com/c/pay/cs_cadastro' });
+      }
+      if (path === '/v1/checkout/sessions/cs_cadastro') {
+        if(consultaForaDoAr)throw new Error('indisponibilidade sintética');
+        return Response.json(sessao());
+      }
+      if (path === '/v1/setup_intents/seti_cadastro') return Response.json({ id: 'seti_cadastro',
+        status: 'succeeded', usage: 'off_session', customer: 'cus_cadastro', payment_method: 'pm_cadastro',
+        metadata: { tenant_id: DOMARI, cadastro_id: cadastroId } });
+      if (path === '/v1/payment_methods/pm_cadastro') return Response.json({ id: 'pm_cadastro',
+        type: 'card', customer: 'cus_cadastro', card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2035 } });
+      throw new Error(`Chamada inesperada: ${path}`);
+    });
+    const checkout = () => http().post('/v1/admin/plano/cartao/checkout')
+      .set('authorization', `Bearer ${token}`).set('Idempotency-Key', 'cadastro-cartao-saas');
+    await http().post('/v1/admin/plano/cartao/checkout').send({ consentiu: true }).expect(401);
+    await checkout().send({ consentiu: false }).expect(400);
+    await checkout().send({ consentiu: true, tenantId: VIZINHA }).expect(400);
+    expect(rede).not.toHaveBeenCalled();
+    const criada = await checkout().send({ consentiu: true }).expect(201);
+    expect(criada.body.url).toBe('https://checkout.stripe.com/c/pay/cs_cadastro');
+    expect((await checkout().send({ consentiu: true }).expect(201)).body.url).toBe(criada.body.url);
+    const antes = await http().get('/v1/admin/plano').set('authorization', `Bearer ${token}`).expect(200);
+    expect(antes.body.cobranca.cadastrado).toBe(false);
+    expect(antes.body.cadastroCartaoDisponivel).toBe(true);
+    consultaForaDoAr=true;
+    const indisponivel=await http().post('/v1/admin/plano/cartao/conciliar').set('authorization',`Bearer ${token}`).expect(503);
+    expect(indisponivel.body.error.code).toBe('cartao_conciliacao_indisponivel');
+    consultaForaDoAr=false;
+    const cru = JSON.stringify({ id: 'evt_setup_saas', type: 'checkout.session.completed', data: { object: sessao() } });
+    const tempo = Math.floor(Date.now() / 1000);
+    const assinatura = createHmac('sha256', process.env['STRIPE_WEBHOOK_SECRET']!).update(`${tempo}.${cru}`).digest('hex');
+    const webhook = () => http().post('/v1/webhooks/stripe').set('content-type', 'application/json')
+      .set('stripe-signature', `t=${tempo},v1=${assinatura}`).send(cru);
+    await http().post('/v1/webhooks/stripe').set('content-type', 'application/json').send(cru).expect(400);
+    expect((await webhook().expect(201)).body.desfecho).toBe('aplicado');
+    expect((await webhook().expect(201)).body.desfecho).toBe('ignorado');
+    const depois = await http().get('/v1/admin/plano').set('authorization', `Bearer ${token}`).expect(200);
+    expect(depois.body.cobranca).toMatchObject({ cadastrado: true, final: '4242', bandeira: 'visa' });
+    expect(JSON.stringify(depois.body)).not.toMatch(/pm_cadastro|cus_cadastro|seti_cadastro/);
+    await admin.$executeRaw`DELETE FROM billing_setup_sessions WHERE tenant_id = ${DOMARI}::uuid`;
+    await admin.$executeRaw`DELETE FROM billing_customers WHERE tenant_id = ${DOMARI}::uuid`;
+  });
 
   it('a barbearia nasce em teste, e o dono consegue ver o próprio plano', async () => {
     // A assinatura nasce no painel da plataforma. Ficar só lá seria o dado que

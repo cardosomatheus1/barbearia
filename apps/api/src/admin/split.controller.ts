@@ -9,7 +9,7 @@ import {
   salvarConfiguracaoDoSplit,
   splitDaVenda,
 } from '@barbearia/finance';
-import { adquirenteDoSplit } from '@barbearia/platform';
+import { adquirenteDoSplit, splitDisponivel } from '@barbearia/platform';
 import { DomainError } from '../common/errors.js';
 import type { AuthenticatedStaff } from '@barbearia/identity';
 import { ZodValidationPipe } from '../common/zod.pipe.js';
@@ -97,7 +97,7 @@ export class SplitController {
         tenantId: staff.tenantId, de: query.de, ate: query.ate, locationId: local.id, limite: 301,
       }),
     ]);
-    return { configuracao, repasses: amostra.slice(0, 300), hasMore: amostra.length > 300 };
+    return { disponivel: splitDisponivel(), configuracao, repasses: amostra.slice(0, 300), hasMore: amostra.length > 300 };
   }
 
   /**
@@ -177,6 +177,7 @@ export class SplitController {
         'Mande um Idempotency-Key de até 128 caracteres para o cadastro do recebedor.',
       );
     }
+    if (!splitDisponivel()) throw new DomainError('split_indisponivel', 409, 'O repasse automático não está disponível. Faça o acerto pela comissão.');
     const local = await unidadeDoBalcao(staff);
     try {
       return await cadastrarRecebedor({
@@ -200,6 +201,7 @@ export class SplitController {
     @Staff() staff: AuthenticatedStaff,
     @Body(new ZodValidationPipe(configuracaoSchema)) body: { ligado: boolean },
   ) {
+    if (body.ligado && !splitDisponivel()) throw new DomainError('split_indisponivel', 409, 'O repasse automático não está disponível nesta instalação.');
     return salvarConfiguracaoDoSplit({
       tenantId: staff.tenantId,
       ligado: body.ligado,

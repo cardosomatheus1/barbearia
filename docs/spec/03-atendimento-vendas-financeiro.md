@@ -309,8 +309,12 @@ Filtrável por unidade e período, com comparativo contra o período anterior.
 Preparado para NFS-e, NF-e/NFC-e quando aplicável, regras municipais e regime
 Salão-Parceiro.
 
-**Decisão de arquitetura:** não implementar lógica municipal no core. Criar a
-abstração `FiscalProvider` e delegar a um emissor terceirizado.
+**Decisão de arquitetura (mandato de setembro/2026):** integração própria,
+sem intermediário. O core mantém o contrato `FiscalProvider`; `finance/nfse`
+implementa A1, XML assinado, transporte mTLS e recuperação. O adaptador nacional
+atual atende MEI e Simples com ISS no DAS, sem retenção; outros perfis e
+municípios sem emissor nacional exigem adaptadores próprios e homologação.
+A implantação não deve ser apresentada como cobertura universal.
 
 ```
 interface FiscalProvider {

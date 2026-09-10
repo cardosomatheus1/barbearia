@@ -42,14 +42,15 @@ const suspeitas = [];
 function registrar(tipo, arquivo, linha) {
   suspeitas.push({ tipo, arquivo, linha });
 }
-function scanTexto(texto, arquivo) {
+function scanTexto(texto, arquivo, historico = false, primeiraLinha = 1) {
+  const achado = (tipo, linha) => registrar(historico ? `${tipo} no histórico Git` : tipo, arquivo, linha);
   const linhas = texto.split(/\r?\n/);
   for (let i=0;i<linhas.length;i+=1) {
     const linha = linhas[i];
     for (const [tipo, regex] of PATTERNS) {
       regex.lastIndex = 0;
       const m = regex.exec(linha);
-      if (m && !PLACEHOLDER.test(m[0])) registrar(tipo, arquivo, i+1);
+      if (m && !PLACEHOLDER.test(m[0])) achado(tipo, primeiraLinha+i);
     }
     // Literal de alta entropia atribuído a variável que por nome deveria ser secret.
     // Em código exigimos string literal; em arquivo estilo env aceitamos valor sem aspas.
@@ -58,7 +59,7 @@ function scanTexto(texto, arquivo) {
       const cotado = new RegExp(`\\b${nomeSensivel}\\b\\s*[:=]\\s*['\"]([^'\"\\n]{20,})['\"]`).exec(linha);
       const envLike = new RegExp(`^\\s*(?:export\\s+)?${nomeSensivel}\\s*=\\s*([^\\s#]{20,})`).exec(linha);
       const valor = cotado?.[1] ?? envLike?.[1];
-      if (valor && !PLACEHOLDER.test(valor)) registrar('secret literal', arquivo, i+1);
+      if (valor && !PLACEHOLDER.test(valor)) achado('secret literal', primeiraLinha+i);
     }
   }
 }
@@ -91,31 +92,36 @@ if (HISTORICO) {
     historico = 'indisponível neste artefato (sem .git)';
   } else {
     try {
-      const diff = execFileSync('git', ['log','-p','--all','--no-color','--format='], {
-        encoding:'utf8', maxBuffer: 128*1024*1024,
+      // O caminho acompanha cada trecho. Fixtures têm a mesma regra na árvore
+      // e no histórico; padrões de credencial continuam proibidos nos testes.
+      const diff = execFileSync('git', ['-c', 'core.quotePath=false', 'log', '-p',
+        '--all', '--no-color', '--no-ext-diff', '--no-renames', '--format=commit:%H', '--unified=0'], {
+        encoding: 'utf8', maxBuffer: 128*1024*1024,
       });
-      const nomes = execFileSync('git', ['log','--all','--name-only','--pretty=format:'], {
-        encoding:'utf8', maxBuffer: 64*1024*1024,
-      });
-      for (const nome of nomes.split(/\r?\n/).filter(Boolean)) {
-        const base = basename(nome);
-        if (ENV_REAL.test(base) && !ENV_PERMITIDOS.has(base)) registrar('arquivo .env no histórico Git', 'git-history', 0);
-      }
-      for (const [tipo, regex] of PATTERNS) {
-        regex.lastIndex = 0;
-        let m;
-        while ((m = regex.exec(diff))) {
-          if (!PLACEHOLDER.test(m[0])) registrar(`${tipo} no histórico Git`, 'git-history', 0);
-        }
-      }
+      let arquivo = null;
+      let commit = '';
+      let numero = 0;
+      let noTrecho = false;
       for (const linha of diff.split(/\r?\n/)) {
-        if (!/^\+[^+]/.test(linha)) continue;
-        const adicionada = linha.slice(1);
-        const nomeSensivel = '[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|ENCRYPTION_KEY)[A-Z0-9_]*';
-        const cotado = new RegExp(`\\b${nomeSensivel}\\b\\s*[:=]\\s*['\"]([^'\"\\n]{20,})['\"]`).exec(adicionada);
-        const envLike = new RegExp(`^\\s*(?:export\\s+)?${nomeSensivel}\\s*=\\s*([^\\s#]{20,})`).exec(adicionada);
-        const valor = cotado?.[1] ?? envLike?.[1];
-        if (valor && !PLACEHOLDER.test(valor)) registrar('secret literal no histórico Git', 'git-history', 0);
+        if (/^commit:[a-f0-9]{40,64}$/.test(linha)) {
+          commit = linha.slice(7); arquivo = null; noTrecho = false;
+        } else if (linha.startsWith('diff --git ')) {
+          arquivo = null; noTrecho = false;
+        } else if (!noTrecho && linha.startsWith('+++ ')) {
+          let destino = linha.slice(4);
+          if (destino.startsWith('"')) destino = JSON.parse(destino);
+          arquivo = destino.startsWith('b/') ? destino.slice(2) : null;
+          if (arquivo && ENV_REAL.test(basename(arquivo)) && !ENV_PERMITIDOS.has(basename(arquivo))) {
+            registrar('arquivo .env no histórico Git', `${arquivo}@${commit}`, 0);
+          }
+        } else if (linha.startsWith('@@ ')) {
+          noTrecho = true;
+          numero = Number(/\+(\d+)/.exec(linha)?.[1] ?? 1);
+        } else if (arquivo && linha.startsWith('+')) {
+          const antes = suspeitas.length;
+          scanTexto(linha.slice(1), arquivo, true, numero++);
+          for (const achado of suspeitas.slice(antes)) achado.arquivo += `@${commit}`;
+        }
       }
       historico = 'verificado';
     } catch (erro) {
