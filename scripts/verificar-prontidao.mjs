@@ -110,6 +110,28 @@ if (/\*\*Status:\s*\d+\s+de\s+\d+\s+blocos\.\*\*/.test(roadmap) || /129\s*(?:de|
 // superfície de estado atual para esta guarda.
 const EXTENSOES_DE_TEXTO = new Set(['.md', '.ts', '.tsx', '.js', '.mjs', '.sql', '.sh']);
 
+/**
+ * Comentário de código fora antes de casar — só em código.
+ *
+ * Esta guarda varre o repositório inteiro, e a linha que **explica** a regra
+ * cita a frase que a regra proíbe. Foi assim que o comentário logo abaixo
+ * reprovou a própria guarda. É o mesmo conserto da guarda de pureza do `core` e
+ * da varredura R8: guarda que proíbe documentar o próprio motivo é guarda que
+ * alguém apaga.
+ *
+ * **Só em código.** Em Markdown `//` é caminho de URL e `/* *​/` não é
+ * comentário nenhum — e, mais importante, prosa é onde a promessa comercial de
+ * fato mora. Apagar comentário de `.md` abriria o buraco que a guarda existe
+ * para fechar.
+ */
+const CODIGO = new Set(['.ts', '.tsx', '.js', '.mjs']);
+
+function semComentarios(rel, texto) {
+  const i = rel.lastIndexOf('.');
+  if (!CODIGO.has(i === -1 ? '' : rel.slice(i))) return texto;
+  return texto.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
 function fontesDeEstadoAtual(diretorio = raiz) {
   const saida = [];
   for (const nome of readdirSync(diretorio)) {
@@ -126,7 +148,7 @@ function fontesDeEstadoAtual(diretorio = raiz) {
     if (!EXTENSOES_DE_TEXTO.has(extensao(nome))) continue;
     if (rel === 'SPEC.md' || rel === 'docs/01-analise-salonsoft.md' || rel === 'docs/02-benchmark-apps-barbearia.md') continue;
     if (/\.test\.[^.]+$/.test(nome) || rel.startsWith('packages/db/migrations/')) continue;
-    saida.push({ arquivo: rel, conteudo: readFileSync(absoluto, 'utf8') });
+    saida.push({ arquivo: rel, conteudo: semComentarios(rel, readFileSync(absoluto, 'utf8')) });
   }
   return saida;
 }
@@ -182,13 +204,42 @@ const regras = [
   },
 ];
 
+/**
+ * A frase que **nega** a capacidade não é promessa dela.
+ *
+ * A guarda reprovou `relatório astra/01_RELATORIO_COMPLETO_DA_SESSAO.md` por
+ * *"NFS-e pronto"* — recortado de **"Não tinha um emissor NFS-e pronto para
+ * copiar"**, que diz o contrário do que a acusação afirmava. O cabeçalho acima
+ * promete pegar "formulações inequívocas", e uma frase negada é o oposto de
+ * inequívoca: guarda que reprova o legítimo é guarda que alguém desliga.
+ *
+ * Olha para trás até o início da frase, e não do arquivo: `.`, `!`, `?`, `;`,
+ * `:` e quebra de linha fecham o alcance. Sem esse limite, um "não" no
+ * parágrafo anterior calaria a próxima afirmação de verdade.
+ *
+ * ## O que ela não vê
+ *
+ * Negação que não é negação — *"Não há dúvida: NFS-e está pronto"* passa, e o
+ * `:` até ajuda ali por acidente. O corte é o mesmo de sempre: pegar a redação
+ * comum e não tentar interpretar português livre. A revisão comercial completa
+ * continua sendo do R8.
+ */
+const NEGACOES = /\b(?:n[aã]o|nunca|jamais|sem|inexistente|faltava|falta|carece)\b/i;
+
+function afirmacaoNegada(conteudo, indice) {
+  const limite = Math.max(
+    ...['.', '!', '?', ';', ':', '\n'].map((c) => conteudo.lastIndexOf(c, indice - 1)),
+  );
+  return NEGACOES.test(conteudo.slice(limite + 1, indice));
+}
+
 for (const { arquivo, conteudo } of fontesDeEstadoAtual()) {
   for (const regra of regras) {
     const estado = porNome.get(regra.nome);
     if (!regra.ativo(estado)) continue;
     for (const padrao of regra.positivos) {
       const achado = padrao.exec(conteudo);
-      if (achado) {
+      if (achado && !afirmacaoNegada(conteudo, achado.index)) {
         falhar(`${regra.nome}: ${arquivo} contradiz a matriz com "${achado[0].trim()}"`);
       }
     }

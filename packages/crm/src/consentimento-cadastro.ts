@@ -55,3 +55,22 @@ export async function confirmarConsentimentoCadastro(p: { tenantId: string; cust
 export async function limparPedidosConsentimento(tx: TransactionClient, agora: Date): Promise<void> {
   await tx.$executeRaw`DELETE FROM customer_marketing_requests WHERE expires_at <= ${agora}`;
 }
+
+/**
+ * A varredura da limpeza acima, e por que carona não bastava.
+ *
+ * `limparPedidosConsentimento` só era chamada de carona: quando **outra** pessoa
+ * pede consentimento, e na anonimização. Carona só alcança quem volta — a
+ * barbearia que experimenta o fluxo e para fica com o pedido vencido para
+ * sempre, e `customer_marketing_requests` guarda `requested_ip`, que é dado
+ * pessoal. É a convenção que já estava escrita: *carona **e** varredura*, como
+ * o `payload` do preview de importação.
+ *
+ * Achada pela guarda de varredura sem chamador, não pela revisão — a terceira
+ * vez que ela pega esta classe.
+ */
+export async function expirarPedidosConsentimento(tenantId: string, agora: Date): Promise<void> {
+  await withTenant(tenantId, async (tx) => {
+    await limparPedidosConsentimento(tx, agora);
+  });
+}

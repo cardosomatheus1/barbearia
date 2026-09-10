@@ -29,5 +29,12 @@ export SEED_DATABASE_URL="$BASE/$DB_NAME"
 # padrão é **não emitir**. A suíte exercita o caminho fiscal inteiro, então ela
 # declara o modo — que é o que o interruptor existe para obrigar.
 export FISCAL_MODO="${FISCAL_MODO:-fake}"
+# O link da via do cliente é montado a partir do endereço do site, e desde o
+# emissor próprio `urlDoDocumento` recusa a falta dele com `nfse_url_ausente` —
+# 409 no fechamento da comanda, oito vezes na esteira. A suíte declara o modo
+# fiscal desde sempre; declarar o modo e não o endereço deixava metade do
+# interruptor ligada. Local e http, que é o que a própria função só aceita fora
+# de produção.
+export WEB_URL="${WEB_URL:-http://127.0.0.1:3001}"
 
 vitest run "$@"

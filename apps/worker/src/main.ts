@@ -17,6 +17,7 @@ import {
   conciliarWhatsAppDoTenant,
   conciliarEnviosBaileys,
   expirarConteudoBaileys,
+  expirarPedidosConsentimento,
   entregarTemplateDaFila,
   assinarWabaDaUnidade,
   respostaParaEnviar,
@@ -521,6 +522,15 @@ async function main(): Promise<void> {
          * Achada pela guarda que este bloco criou, não pela revisão.
          */
         await expirarSaldos(tenantId, agora);
+
+        /**
+         * O pedido de consentimento vencido sai por varredura, não só de carona.
+         *
+         * A limpeza rodava quando **outra** pessoa pedia consentimento — e a
+         * barbearia que experimenta o fluxo e para nunca volta a chamá-la. A
+         * linha guarda `requested_ip`, que é dado pessoal com prazo.
+         */
+        await expirarPedidosConsentimento(tenantId, agora);
 
         if (varrida.marcados > 0 || enviados > 0) {
           // Só contagem: quem recebeu é dado de cliente, e log não é lugar dele.

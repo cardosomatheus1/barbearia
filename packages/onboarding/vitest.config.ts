@@ -24,5 +24,22 @@ export default defineConfig({
      * travada, e aí o vermelho é legítimo.
      */
     hookTimeout: 60_000,
+    /**
+     * O cenário desta suíte nasce **no corpo**, não no gancho — e o corpo tinha
+     * o padrão de 5s.
+     *
+     * Cada teste aqui precisa da própria barbearia, então `percorrer()` roda as
+     * seis etapas dentro do `it`. Três deles montam **duas** casas, e o mais
+     * pesado — a unidade da vizinha não é editável nem com o id na mão — soma um
+     * `percorrer` inteiro a um `cadastrar`. Na esteira o arquivo leva 103s para
+     * 18 testes: cerca de 6s por teste, contra um orçamento de 5. Ele reprovou
+     * por isso, com a regra que ele prova intacta.
+     *
+     * O gancho já tinha folga porque a semente é lenta; o corpo não tinha, e é
+     * onde a semente desta suíte mora. Trinta segundos pela mesma razão dos
+     * sessenta acima: é cinco vezes o pior caso medido e continua reprovando um
+     * travamento de verdade — não é tolerância a lentidão.
+     */
+    testTimeout: 30_000,
   },
 });
