@@ -154,13 +154,31 @@ describe('a varredura que ninguém chama', () => {
    */
   const CONHECIDAS = new Set([]);
 
+  /**
+   * O orçamento de tempo é do **corpo**, e o corpo aqui lê o repositório inteiro.
+   *
+   * Ela monta a AST de todo `.ts` de `packages/` para seguir chamada por chamada
+   * — é isso que a torna melhor que um `grep` — e isso custa. Na esteira o
+   * arquivo leva 23,8s, com 14,8s neste teste; nesta máquina, 1,1s. O padrão do
+   * vitest é 5s, então ela **reprovava por lentidão** nas duas execuções em que
+   * a `main` ficou vermelha.
+   *
+   * O estrago não é o vermelho: é que a guarda nunca chegava ao veredito.
+   * `limparPedidosConsentimento` estava sem varredura, e o timeout escondeu isso
+   * — guarda que não termina não acusa ninguém, e a falha lê como se fosse dela
+   * mesma. Foi preciso replicar a conferência à mão para o defeito aparecer.
+   *
+   * Sessenta segundos pela razão do `hookTimeout` das suítes de integração: é
+   * quatro vezes o pior caso medido e continua reprovando um travamento de
+   * verdade — não é tolerância a lentidão.
+   */
   it('toda varredura e atribuição é mencionada por quem dispara trabalho de fundo', () => {
     const chamadas = alcancadas(DISPARADORES, fontes(join(RAIZ, 'packages')).map(caminho => readFileSync(caminho, 'utf8')));
     const orfas = exportadas()
       .filter((nome) => !DISPARADORES.includes(nome) && !chamadas.has(nome))
       .filter((nome) => !CONHECIDAS.has(nome));
     expect(orfas, 'função de fundo sem chamador é comentário, não código').toEqual([]);
-  });
+  }, 60_000);
 
   it('segue auxiliar chamado pelo serviço agendado e recusa referência que existe só em comentário ou função órfã', () => {
     const programa = `export async function varrerRetencao() { await limparPedidos(); }
