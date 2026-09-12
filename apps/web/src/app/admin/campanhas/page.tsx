@@ -3,6 +3,7 @@ import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
+  DESTINO_NA_TELA,
   EXPLICACAO_DA_CAMPANHA,
   FILTROS_DE_CAMPANHA,
   JANELA_MAXIMA_DIAS,
@@ -957,6 +958,20 @@ export default async function CampanhasPage({ searchParams }: Props) {
                             Com botão: {texto.botoes.map((b) => rotuloDoBotao(b)).join(' · ')}
                           </span>
                         ) : null}
+                        {/*
+                          O destino, em cada opção, porque é aqui que ele é
+                          escolhido (bloco 137).
+
+                          O cabeçalho da tela anunciava "Envio automático ·
+                          Meta" **antes** desta lista — afirmando o destino
+                          antes da escolha que o decide. E texto manual nem
+                          aparecia, então a pessoa criava a campanha sem saber
+                          que havia uma terceira resposta.
+                        */}
+                        <span className="alternativa__nota">
+                          {DESTINO_NA_TELA[texto.destino].rotulo} ·{' '}
+                          {DESTINO_NA_TELA[texto.destino].explicacao}
+                        </span>
                       </span>
                     </label>
                   ))
@@ -964,8 +979,9 @@ export default async function CampanhasPage({ searchParams }: Props) {
               </div>
               <p className="ui-field__hint">
                 O texto chega com o nome do cliente e da barbearia preenchidos.{' '}
-                <a href="/admin/whatsapp">Escrever outro em WhatsApp</a> — cada texto novo vira
-                uma opção nesta lista. Lembrete e confirmação não entram: são do agendamento, e
+                <a href="/admin/whatsapp">Escrever outro em WhatsApp</a> — de aprovação pela Meta,
+                do WhatsApp conectado, ou para você mandar à mão. Cada texto novo vira uma opção
+                nesta lista. Lembrete e confirmação não entram: são do agendamento, e
                 como campanha prometeriam um horário que a pessoa não tem.
               </p>
             </div>

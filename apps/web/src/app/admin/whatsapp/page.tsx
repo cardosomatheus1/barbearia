@@ -31,7 +31,7 @@ import { FalhaDaLeitura } from '../falha-da-leitura';
 import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { ConexaoWhatsApp } from './conexao';
 import { TextosBaileys } from './textos-baileys';
-import { ModosWhatsApp } from './modos';
+import { ModosWhatsApp, ResumoDasMensagens } from './modos';
 import { EditorMeta } from './editor-meta';
 
 /**
@@ -388,7 +388,12 @@ export default async function WhatsAppPage({ searchParams }: Props) {
 
   const cadastro = cadastroResposta.ok ? cadastroResposta.dados.cadastro : null;
   const todosTextos = templatesResposta.ok ? templatesResposta.dados.templates : [];
-  const templates = todosTextos.filter(t => t.canal !== 'baileys');
+  // `canal === 'meta'`, e não `!== 'baileys'`: com o transporte manual visível
+  // desde o bloco 137, a negação jogaria os textos manuais dentro da seção
+  // "Mensagens da Meta" — que fala de aprovação, e manual não tem nenhuma.
+  const templates = todosTextos.filter(t => t.canal === 'meta');
+  const textosManuais = todosTextos.filter(t => t.canal === 'manual');
+  const textosBaileys = todosTextos.filter(t => t.canal === 'baileys');
   // `null` quando o app da plataforma não foi configurado: aí a tela não
   // desenha o botão, porque botão que abre janela vazia é pior que botão nenhum.
   const signup = signupResposta.ok ? signupResposta.dados.signup : null;
@@ -421,6 +426,12 @@ export default async function WhatsAppPage({ searchParams }: Props) {
       </p>
 
       <ModosWhatsApp modo={modo} ativo={ativo} />
+      <ResumoDasMensagens
+        ativo={ativo}
+        baileys={textosBaileys.length}
+        manuais={textosManuais.length}
+        meta={templates.length}
+      />
 
       {falha ? (
         <div className="ui-alert ui-alert--danger painel__aviso" role="alert">
@@ -446,9 +457,14 @@ export default async function WhatsAppPage({ searchParams }: Props) {
       {conexaoResposta.ok ? <ConexaoWhatsApp inicial={conexaoResposta.dados} modo={modo} podeMexer={podeMexer} /> :
         <FalhaDaLeitura code={conexaoResposta.code} href="/admin/whatsapp" oque="a conexão do WhatsApp" />}
       {conexaoResposta.ok && modo === 'meta' && ativo !== modo ? signup ? <Conectar modo={signup.modo} habilitado={false} /> : <p className="painel__nota">A conexão guiada pela Meta ainda não está disponível nesta instalação. Peça ao suporte para habilitá-la; quem já possui credenciais da API pode usar a configuração avançada após escolher a conexão Meta.</p> : null}
-      {conexaoResposta.ok && modo === 'baileys' && ativo === modo ? <>
+      {/*
+        Os textos do Baileys deixam de exigir a conexão ativa: eles são texto,
+        editá-los é inofensivo, e exigi-la obrigava a trocar a conexão da casa
+        só para ler o que já estava escrito (bloco 137).
+      */}
+      {conexaoResposta.ok && modo === 'baileys' ? <>
         {feito === 'texto-local' ? <p className="ui-alert ui-alert--success" role="status">Mensagem salva.</p> : null}
-        {templatesResposta.ok ? <TextosBaileys mensagens={todosTextos.filter(t => t.canal === 'baileys')} /> :
+        {templatesResposta.ok ? <TextosBaileys mensagens={textosBaileys} /> :
           <FalhaDaLeitura code={templatesResposta.code} href="/admin/whatsapp" oque="as mensagens" />}
       </> : conexaoResposta.ok && modo === 'meta' && ativo === modo ? <>
 
@@ -538,6 +554,16 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         <ConfiguracaoAvancada cadastro={cadastro} />
       </details> : null}
 
+      </> : null}
+      {/*
+        Fora do ramo da conexão ativa (bloco 137).
+
+        Ela só era desenhada com o modo Meta **selecionado e ativo**: quem
+        trocasse a conexão para Baileys perdia de vista os próprios textos
+        aprovados, que continuam existindo e voltam a sair no dia em que a
+        conexão voltar. Separar não é esconder.
+      */}
+      {modo === 'meta' ? (
       <section className="cartao-balcao" id="mensagens-meta">
         <h2 className="cartao-balcao__titulo">Mensagens da Meta</h2>
         <p className="cartao-balcao__texto">
@@ -600,7 +626,7 @@ export default async function WhatsAppPage({ searchParams }: Props) {
         ) : null}
         <p className="painel__nota">Depois da aprovação, escolha a mensagem em <a href="/admin/campanhas">Campanhas, para enviar uma vez a uma lista</a>, ou em <a href="/admin/automacoes">Automações, para enviar quando algo acontecer</a>.</p>
       </section>
-      </> : null}
+      ) : null}
     </main>
   );
 }

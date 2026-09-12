@@ -8,7 +8,7 @@ import styles from './conexao.module.css';
 function Editor({ mensagem }: { readonly mensagem?: TemplateNaTelaDoAdmin }) {
   const [estado, salvar, pendente] = useActionState(acaoSalvarTextoBaileys, { erro: null });
   const [titulo, setTitulo] = useState(mensagem?.titulo ?? '');
-  const [habilitado, setHabilitado] = useState(mensagem?.disponivel === false ? '0' : '1');
+  const [habilitado, setHabilitado] = useState(mensagem?.pronto === false ? '0' : '1');
   const [tipo, setTipo] = useState<TipoDeNotificacao>((mensagem?.tipo ?? 'retorno') as TipoDeNotificacao);
   const [corpo, setCorpo] = useState(mensagem?.corpo ?? 'Olá {{1}}! Já estamos com saudade. Vamos marcar seu próximo corte na {{2}}?');
   const prefixo = mensagem?.id ?? 'nova';
@@ -37,12 +37,12 @@ function Editor({ mensagem }: { readonly mensagem?: TemplateNaTelaDoAdmin }) {
 }
 
 export function TextosBaileys({ mensagens }: { readonly mensagens: readonly TemplateNaTelaDoAdmin[] }) {
-  return <section className="cartao-balcao">
-    <h2 className="cartao-balcao__titulo">Mensagens por QR</h2>
+  return <section className="cartao-balcao" id="mensagens-baileys">
+    <h2 className="cartao-balcao__titulo">Mensagens pelo Baileys</h2>
     <p className="painel__nota">Salve os textos e escolha quais usar nas campanhas e automações. Eles não precisam de aprovação da Meta.</p>
     <p className="painel__nota"><a href="/admin/campanhas">Campanhas: enviar para uma lista</a> · <a href="/admin/automacoes">Automações: enviar quando algo acontecer</a></p>
     {mensagens.length ? <ul className="lista-cadastro">{mensagens.map(t => <li key={t.id}>
-      <details className="dobra"><summary className="dobra__titulo">{t.titulo ?? nomeDoAviso(t.tipo as TipoDeNotificacao)} · {t.disponivel ? 'Disponível' : 'Pausada'}</summary>
+      <details className="dobra"><summary className="dobra__titulo">{t.titulo ?? nomeDoAviso(t.tipo as TipoDeNotificacao)} · {t.pronto ? 'Disponível' : 'Pausada'}</summary>
         <Editor mensagem={t} />
       </details>
     </li>)}</ul> : <p className="painel__nota">Crie a primeira mensagem para habilitar os avisos desta conexão.</p>}

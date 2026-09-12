@@ -998,7 +998,19 @@ export async function atribuirReceita(params: {
                ORDER BY o.closed_at
                LIMIT 1
             ) o ON true
-           WHERE tt.sent_at IS NOT NULL AND tt.goal_met_at IS NULL
+           -- wamid IS NOT NULL, e não só sent_at (bloco 137).
+           --
+           -- sent_at é carimbado mesmo quando o canal estava desligado: o bloco
+           -- 97 descobriu isso e consertou a contagem da tela, que passou a
+           -- separar "enviados" de "enviados pelo WhatsApp". A atribuição ficou
+           -- para trás e continuou creditando quem nunca recebeu nada. Uma
+           -- campanha com zero mensagens entregues mostrava R$ 1.991,00 de
+           -- receita atribuída em produção: gente que voltou sozinha, creditada
+           -- a uma mensagem que não saiu.
+           --
+           -- É a coluna que a propria tela chama de "a unica que responde se
+           -- ela pagou o que custou", respondendo com dinheiro alheio.
+           WHERE tt.wamid IS NOT NULL AND tt.goal_met_at IS NULL
         ) v
        WHERE t.id = v.alvo AND t.goal_met_at IS NULL
     `;

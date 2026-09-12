@@ -3,8 +3,11 @@ import {
   AVISO_SEM_GERENCIA,
   BOTOES_DA_MENSAGEM,
   BOTOES_DO_AVISO,
+  CANAIS_DO_TEXTO,
+  DESTINO_NA_TELA,
   ESCOPO_DE_ENVIO,
   ESCOPO_DE_GERENCIA,
+  ESTADOS_DA_MENSAGEM,
   ESTADOS_DO_TEMPLATE,
   ESTADOS_DO_WHATSAPP,
   EXPLICACAO_DO_TEMPLATE,
@@ -12,15 +15,18 @@ import {
   FakeWhatsAppProvider,
   ROTULO_DO_BOTAO,
   ROTULO_DO_TEMPLATE,
-  ESTADOS_DA_MENSAGEM,
-  estadoDaMensagemNaTela,
-  estadoDoTextoNaTela,
   ROTULO_DO_WHATSAPP,
   botaoConhecido,
+  canalDoTextoConhecido,
+  destinoDoTexto,
+  estadoDaMensagemNaTela,
+  estadoDoTextoNaTela,
   lerPayload,
   montarPayload,
   podeGerenciarTemplates,
   templateUtilizavel,
+  textoEscolhivel,
+  textoPronto,
   whatsappDisponivel,
 } from './whatsapp.js';
 import { TIPOS_DE_NOTIFICACAO } from './notificacao.js';
@@ -323,5 +329,51 @@ describe('o que a tela escreve sobre uma mensagem que saiu', () => {
     // Silêncio numa tela que existe para explicar o que aconteceu é o pior
     // desfecho: o código cru pelo menos é pesquisável.
     expect(estadoDaMensagemNaTela('inventado').rotulo).toBe('inventado');
+  });
+});
+
+describe('os três transportes de um texto', () => {
+  const meta = { canal: 'meta' as const, habilitadoLocalmente: true };
+  const manual = { canal: 'manual' as const, habilitadoLocalmente: true };
+  const baileys = { canal: 'baileys' as const, habilitadoLocalmente: true };
+
+  it('texto manual não espera aprovação da Meta, que nunca vai olhá-lo', () => {
+    expect(textoPronto({ ...manual, estado: 'pendente' })).toBe(true);
+    expect(textoPronto({ ...baileys, estado: 'pendente' })).toBe(true);
+    expect(textoPronto({ ...meta, estado: 'pendente' })).toBe(false);
+    expect(textoPronto({ ...meta, estado: 'aprovado' })).toBe(true);
+  });
+
+  it('o interruptor local desliga o que a própria barbearia escreve', () => {
+    expect(textoPronto({ ...manual, habilitadoLocalmente: false, estado: 'aprovado' })).toBe(false);
+    expect(textoPronto({ ...baileys, habilitadoLocalmente: false, estado: 'aprovado' })).toBe(false);
+  });
+
+  /**
+   * O manual é a saída de quem não conectou nada: é o único que não depende da
+   * conexão da unidade, e por isso é escolhível nas duas.
+   */
+  it('manual é escolhível em qualquer conexão; automático exige a conexão dele', () => {
+    for (const conexao of ['meta', 'baileys'] as const) {
+      expect(textoEscolhivel({ ...manual, estado: 'pendente', conexaoDaUnidade: conexao })).toBe(true);
+    }
+    expect(textoEscolhivel({ ...meta, estado: 'aprovado', conexaoDaUnidade: 'meta' })).toBe(true);
+    expect(textoEscolhivel({ ...meta, estado: 'aprovado', conexaoDaUnidade: 'baileys' })).toBe(false);
+    expect(textoEscolhivel({ ...baileys, estado: 'pendente', conexaoDaUnidade: 'baileys' })).toBe(true);
+    expect(textoEscolhivel({ ...baileys, estado: 'pendente', conexaoDaUnidade: 'meta' })).toBe(false);
+  });
+
+  it('o destino sai do transporte, e a tela não o inventa', () => {
+    expect(destinoDoTexto('manual')).toBe('fila');
+    expect(destinoDoTexto('meta')).toBe('automatico');
+    expect(destinoDoTexto('baileys')).toBe('automatico');
+    for (const canal of CANAIS_DO_TEXTO) {
+      expect(DESTINO_NA_TELA[destinoDoTexto(canal)].rotulo).toBeTruthy();
+    }
+  });
+
+  it('canal desconhecido não passa por conhecido', () => {
+    expect(canalDoTextoConhecido('manual')).toBe(true);
+    expect(canalDoTextoConhecido('telegrama')).toBe(false);
   });
 });

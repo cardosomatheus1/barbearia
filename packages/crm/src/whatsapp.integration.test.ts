@@ -585,6 +585,51 @@ describeIfDb('WhatsApp oficial', () => {
     expect(depois[0]?.estado).toBe('aprovado');
   });
 
+  /**
+   * Os três transportes chegam à tela, e a conexão decide só quem sai sozinho.
+   *
+   * A consulta excluía `transport = 'manual'` e cortava tudo que não fosse a
+   * conexão ativa: quem estava na Meta não via os textos do Baileys nem os
+   * manuais, e a fila de envio à mão — pronta, testada e ligada ao despacho —
+   * ficava inalcançável de Campanhas. Uma capacidade inteira atrás de um WHERE.
+   */
+  it('os três transportes aparecem, e só o manual independe da conexão', async () => {
+    await exec(`
+      INSERT INTO whatsapp_templates (id, tenant_id, location_id, kind, name, status, body,
+                                      transport, local_enabled)
+      VALUES ('c0000000-0000-4000-8000-00000000000a', '${TENANT}', '${LOCAL}', 'retorno',
+              'so_meta', 'aprovado', 'Oi {{1}}', 'meta', true),
+             ('c0000000-0000-4000-8000-00000000000b', '${TENANT}', '${LOCAL}', 'retorno',
+              'so_baileys', 'rascunho', 'Oi {{1}}', 'baileys', true),
+             ('c0000000-0000-4000-8000-00000000000c', '${TENANT}', '${LOCAL}', 'retorno',
+              'so_manual', 'rascunho', 'Oi {{1}}', 'manual', true);
+    `);
+
+    const porNome = async () =>
+      Object.fromEntries((await templatesDaUnidade(TENANT, LOCAL)).map((t) => [t.nome, t]));
+
+    // A unidade nasce na conexão Meta.
+    const naMeta = await porNome();
+    expect(naMeta['so_meta']).toMatchObject({ canal: 'meta', destino: 'automatico', disponivel: true });
+    expect(naMeta['so_manual']).toMatchObject({ canal: 'manual', destino: 'fila', disponivel: true, pronto: true });
+    // Existe na lista — o defeito era sumir —, mas não sai sozinho nesta conexão.
+    expect(naMeta['so_baileys']).toMatchObject({ canal: 'baileys', disponivel: false, pronto: true });
+
+    // A conexão pelo estado, e não por `selecionarCanal`: ela exige o
+    // interruptor do Baileys ligado, e o que este teste prova é a leitura.
+    await exec(`
+      INSERT INTO whatsapp_channels (location_id, tenant_id, transport)
+      VALUES ('${LOCAL}', '${TENANT}', 'baileys')
+      ON CONFLICT (location_id) DO UPDATE SET transport = 'baileys';
+    `);
+
+    const noBaileys = await porNome();
+    expect(noBaileys['so_baileys']?.disponivel).toBe(true);
+    expect(noBaileys['so_meta']?.disponivel).toBe(false);
+    // O manual é o único que atravessa a troca: ele não depende de conexão.
+    expect(noBaileys['so_manual']?.disponivel).toBe(true);
+  });
+
   it('o cadastro à mão inscreve o app na WABA, como o Embedded Signup faz', async () => {
     /**
      * O defeito que este teste prende custou duas horas de produção.

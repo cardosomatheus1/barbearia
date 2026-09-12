@@ -375,7 +375,9 @@ describeIfDb('campanhas', () => {
       campanhaId: criada.id,
       agora: AGORA,
       timeZone: 'America/Bahia',
-      enviar: async () => null,
+      // Com `wamid`: a mensagem **saiu**. Este teste passava com `null` — canal
+      // desligado — e creditava receita a quem não recebeu nada (bloco 137).
+      enviar: async () => 'wamid.atribuicao.saiu',
     });
 
     // O carimbo é o relógio injetado, então a janela é contada a partir dele.
@@ -392,6 +394,39 @@ describeIfDb('campanhas', () => {
 
     const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
     expect(lista[0]).toMatchObject({ agendamentos: 1, receitaCents: 8900 });
+  });
+
+  /**
+   * O defeito que a produção mostrou: uma campanha com **zero** mensagens
+   * entregues exibindo R$ 1.991,00 de receita atribuída.
+   *
+   * `sent_at` é carimbado mesmo com o canal desligado — o bloco 97 achou isso e
+   * consertou a contagem da tela, não a atribuição. Quem volta sozinho passava
+   * a ser crédito de uma mensagem que nunca saiu, na coluna que a tela chama de
+   * "a única que responde se ela pagou o que custou".
+   */
+  it('campanha cujo canal estava desligado não credita quem voltou sozinho', async () => {
+    const criada = await campanha({ janelaDias: 7 });
+    await despacharCampanha({
+      tenantId: TENANT,
+      campanhaId: criada.id,
+      agora: AGORA,
+      timeZone: 'America/Bahia',
+      enviar: async () => null,
+    });
+
+    const depois = new Date(AGORA.getTime() + 2 * 86_400_000).toISOString();
+    await exec(`
+      INSERT INTO orders (id, tenant_id, location_id, customer_id, status,
+                          business_day, closed_at, total_cents)
+      VALUES ('27575757-0000-4000-8000-0000000000f1', '${TENANT}', '${LOCAL}', '${CARLOS}',
+              'paid', current_date, '${depois}', 8900);
+    `);
+
+    expect(await atribuirReceita({ tenantId: TENANT, agora: AGORA })).toBe(0);
+
+    const lista = await campanhasDaCasa({ tenantId: TENANT, podeVerReceita: true });
+    expect(lista[0]).toMatchObject({ enviadosPeloWhatsApp: 0, agendamentos: 0, receitaCents: 0 });
   });
 
   it('a venda fora da janela não é creditada', async () => {

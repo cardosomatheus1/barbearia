@@ -3,6 +3,7 @@ import { conexaoWhatsAppNaApi } from '@/lib/admin-api';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import {
+  DESTINO_NA_TELA,
   EXPLICACAO_DA_FALHA,
   GATILHOS,
   GATILHOS_COM_VARREDURA,
@@ -710,6 +711,12 @@ export default async function AutomacoesPage({ searchParams }: Props) {
                             Com botão: {texto.botoes.map((b) => rotuloDoBotao(b)).join(' · ')}
                           </span>
                         ) : null}
+                        {/* O destino em cada opção, como em Campanhas: é aqui
+                            que ele é escolhido (bloco 137). */}
+                        <span className="alternativa__nota">
+                          {DESTINO_NA_TELA[texto.destino].rotulo} ·{' '}
+                          {DESTINO_NA_TELA[texto.destino].explicacao}
+                        </span>
                       </span>
                     </label>
                   ))

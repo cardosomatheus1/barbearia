@@ -854,3 +854,86 @@ export function lerPayload(
   return { botao, agendamentoId };
 }
 
+
+/**
+ * Os três transportes de um texto, e o que cada um exige (bloco 137).
+ *
+ * ## Transporte é do texto; conexão é da unidade
+ *
+ * A tela tratava as três como irmãs — "Como você quer enviar?" com Meta,
+ * Baileys e Manual lado a lado — e elas não são a mesma pergunta. Meta e
+ * Baileys são **conexão**, uma por unidade, e decidem o que sai sozinho.
+ * Manual é **transporte de um texto**, convive com qualquer conexão, e nunca
+ * sai sozinho: vira fila para alguém mandar.
+ *
+ * Achatadas numa pergunta só, o produto escondia duas capacidades inteiras: os
+ * textos do Baileys só apareciam com a conexão Baileys escolhida, e os manuais
+ * moravam noutra página. Quem estava na Meta não sabia que as outras existiam.
+ */
+export const CANAIS_DO_TEXTO = ['meta', 'baileys', 'manual'] as const;
+export type CanalDoTexto = (typeof CANAIS_DO_TEXTO)[number];
+
+export function canalDoTextoConhecido(valor: string): valor is CanalDoTexto {
+  return (CANAIS_DO_TEXTO as readonly string[]).includes(valor);
+}
+
+/**
+ * O que acontece quando a campanha for enviada — derivado do transporte.
+ *
+ * A pessoa escolhe o texto; é o texto que decide o destino. Escrito na tela em
+ * vez de derivado aqui, seriam três telas inventando a própria frase para o
+ * mesmo fato — a lista paralela que este repositório já pagou cinco vezes.
+ */
+export type DestinoDoTexto = 'automatico' | 'fila';
+
+export function destinoDoTexto(canal: CanalDoTexto): DestinoDoTexto {
+  return canal === 'manual' ? 'fila' : 'automatico';
+}
+
+/**
+ * O texto está pronto para ser escolhido — **antes** de olhar a conexão.
+ *
+ * `manual` e `baileys` são escritos pela própria barbearia e valem pelo
+ * interruptor local. `meta` depende de aprovação, que é um estado que só a Meta
+ * concede — e um texto manual, que ninguém vai mandar para ela, nunca o teria.
+ * Foi assim que o manual ficou preso: caía no ramo da Meta e exigia uma
+ * aprovação que não se aplica a ele.
+ */
+export function textoPronto(p: {
+  readonly canal: CanalDoTexto;
+  readonly estado: EstadoDoTemplate;
+  readonly habilitadoLocalmente: boolean;
+}): boolean {
+  return p.canal === 'meta' ? p.estado === 'aprovado' : p.habilitadoLocalmente;
+}
+
+/**
+ * Dá para escolher este texto numa campanha hoje.
+ *
+ * Pronto **e** com destino possível: automático exige que a conexão da unidade
+ * seja a daquele texto; fila não exige conexão nenhuma, e é justamente o que a
+ * torna a saída de quem não conectou nada.
+ */
+export function textoEscolhivel(p: {
+  readonly canal: CanalDoTexto;
+  readonly estado: EstadoDoTemplate;
+  readonly habilitadoLocalmente: boolean;
+  readonly conexaoDaUnidade: 'meta' | 'baileys';
+}): boolean {
+  if (!textoPronto(p)) return false;
+  return p.canal === 'manual' || p.canal === p.conexaoDaUnidade;
+}
+
+/** O que a tela escreve ao lado de cada opção, para a escolha não ser às cegas. */
+export const DESTINO_NA_TELA: Readonly<
+  Record<DestinoDoTexto, { readonly rotulo: string; readonly explicacao: string }>
+> = {
+  automatico: {
+    rotulo: 'Sai sozinho',
+    explicacao: 'O sistema envia pelo WhatsApp conectado, sem você fazer nada.',
+  },
+  fila: {
+    rotulo: 'Entra na sua fila',
+    explicacao: 'Você abre a conversa já pronta e manda uma por uma, pelo seu WhatsApp.',
+  },
+};

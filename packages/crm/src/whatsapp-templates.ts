@@ -9,6 +9,11 @@ import {
   botaoQueLevaConhecido,
   type BotaoDaMensagem,
   type BotaoQueLeva,
+  destinoDoTexto,
+  textoEscolhivel,
+  textoPronto,
+  type CanalDoTexto,
+  type DestinoDoTexto,
   type EstadoDoTemplate,
   type TipoDeNotificacao,
   type WhatsAppProvider,
@@ -18,8 +23,27 @@ import { recusar } from './whatsapp-erros.js';
 import { registrarFalhaDaSubmissao, reservarSubmissaoDeTemplate } from './whatsapp-template-submissao.js';
 
 export interface TemplateNaTela {
-  readonly canal: 'meta' | 'baileys';
+  readonly canal: CanalDoTexto;
+  /** Dá para escolher numa campanha hoje — pronto **e** com destino possível. */
   readonly disponivel: boolean;
+  /**
+   * O texto em si está pronto, **sem olhar a conexão** (bloco 137).
+   *
+   * São duas perguntas, e conflacioná-las foi o defeito original: com uma só, o
+   * editor do Baileys chamava de *"Pausada"* toda mensagem de quem estava na
+   * conexão Meta — e o seletor de uso abria em "Pausada" sobre um texto que a
+   * barbearia tinha deixado ligado. `disponivel` responde "dá para usar hoje";
+   * `pronto` responde "está escrito e ligado".
+   */
+  readonly pronto: boolean;
+  /**
+   * O que acontece ao enviar: sai sozinho, ou entra na fila (bloco 137).
+   *
+   * Derivado do transporte e não escrito na tela: Campanhas, Automações e a
+   * tela de WhatsApp mostram a mesma lista, e três telas inventando a própria
+   * frase para o mesmo fato é a lista paralela de sempre.
+   */
+  readonly destino: DestinoDoTexto;
   readonly id: string;
   readonly tipo: TipoDeNotificacao;
   readonly nome: string;
@@ -67,11 +91,13 @@ const paraTela = (l: {
   buttons: unknown;
   rejection_reason: string | null;
   na_fila: boolean;
-  transport: 'meta' | 'baileys';
+  transport: CanalDoTexto;
   local_enabled: boolean;
 }): TemplateNaTela => ({
   canal: l.transport,
-  disponivel: l.transport === 'baileys' ? l.local_enabled : l.status === 'aprovado',
+  disponivel: textoPronto({ canal: l.transport, estado: l.status, habilitadoLocalmente: l.local_enabled }),
+  pronto: textoPronto({ canal: l.transport, estado: l.status, habilitadoLocalmente: l.local_enabled }),
+  destino: destinoDoTexto(l.transport),
   id: l.id,
   tipo: l.kind,
   nome: l.name,
@@ -92,11 +118,25 @@ export async function templatesDaUnidade(
     const linhas = await tx.$queryRaw<Parameters<typeof paraTela>[0][]>(sql`
       SELECT ${COLUNAS_DO_TEMPLATE}
         FROM whatsapp_templates
-       WHERE location_id = ${locationId}::uuid AND transport <> 'manual'
+       WHERE location_id = ${locationId}::uuid
        ORDER BY kind, created_at DESC
     `);
-    const canal = await canalDaUnidade({ tenantId, locationId }, tx);
-    return linhas.map(l => { const t = paraTela(l); return { ...t, disponivel: t.disponivel && t.canal === canal }; });
+    /**
+     * Os três transportes, sempre (bloco 137).
+     *
+     * A consulta excluía `manual` e a linha de baixo cortava tudo que não
+     * fosse a conexão ativa: quem estava na Meta não enxergava os textos do
+     * Baileys nem os manuais, e concluía que aquelas capacidades não existiam.
+     * A lista agora traz os três, e `disponivel` diz quais dão para escolher
+     * **hoje** — que é outra pergunta, e é a tela que a explica.
+     */
+    const conexaoDaUnidade = await canalDaUnidade({ tenantId, locationId }, tx);
+    return linhas.map((l) => ({
+      ...paraTela(l),
+      disponivel: textoEscolhivel({
+        canal: l.transport, estado: l.status, habilitadoLocalmente: l.local_enabled, conexaoDaUnidade,
+      }),
+    }));
   });
 }
 

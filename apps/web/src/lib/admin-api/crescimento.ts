@@ -1,3 +1,4 @@
+import type { CanalDoTexto, DestinoDoTexto, EstadoDoTemplate } from '@barbearia/core';
 import type {
   AlertaDeEstoque,
   BaseDeComissao,
@@ -48,26 +49,32 @@ export interface CadastroDoWhatsAppNaTela {
   readonly escopos: readonly string[] | null;
 }
 
+/**
+ * O texto do WhatsApp na tela do admin.
+ *
+ * `canal` e `destino` vêm de `core` em vez de redeclarados: eram uma cópia com
+ * `'meta' | 'baileys'` escrito à mão, e por isso o transporte `manual` — que o
+ * banco aceita desde o bloco 132 — não existia deste lado. O tipo mentia
+ * dizendo que o estado não existia, e a tela nem tinha como mostrá-lo. É a
+ * convenção do tipo com o mesmo nome nos dois lados, cobrada aqui pela terceira
+ * vez.
+ */
 export interface TemplateNaTelaDoAdmin {
-  readonly canal: 'meta' | 'baileys';
+  readonly canal: CanalDoTexto;
   readonly disponivel: boolean;
+  /** Escrito e ligado, sem olhar a conexão — é outra pergunta (bloco 137). */
+  readonly pronto: boolean;
+  readonly destino: DestinoDoTexto;
   readonly id: string;
   readonly tipo: string;
   readonly nome: string;
   /** O nome em português. Nulo é texto anterior ao bloco 94. */
   readonly titulo: string | null;
   readonly idioma: string;
-  readonly estado: 'rascunho' | 'pendente' | 'aprovado' | 'rejeitado' | 'pausado';
+  readonly estado: EstadoDoTemplate;
   readonly corpo: string;
   readonly botoes: readonly string[];
   readonly motivoDaRecusa: string | null;
-  /**
-   * Ainda não saiu daqui (bloco 133).
-   *
-   * `pendente` responde duas coisas desde que a ida à Meta virou tarefa, e sem
-   * este campo a tela dizia "a Meta costuma responder em minutos" sobre um
-   * texto que nem tinha chegado lá.
-   */
   readonly naFila: boolean;
 }
 
