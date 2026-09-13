@@ -40,7 +40,7 @@ import { mascararTelefone } from './conflitos';
  */
 
 export const metadata: Metadata = {
-  title: 'Trazer minha base',
+  title: 'Importar dados',
   robots: { index: false, follow: false },
 };
 

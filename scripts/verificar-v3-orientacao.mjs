@@ -51,7 +51,19 @@ for (const secao of unicas) {
 }
 
 // O V3 elimina o segundo menu vertical no notebook. A única navegação vertical é o trilho.
-exigir(css.includes('grid-template-columns: 5.25rem minmax(0, 1fr);'), 'casco desktop ainda reserva uma segunda coluna vertical');
+//
+// A conferência é a **forma** da grade — uma coluna fixa para o trilho e o
+// resto para o trabalho —, nunca a largura dela. Fixada em `5.25rem`, esta
+// linha reprovou o bloco 138, que alargou a coluna para caber o nome do módulo
+// ao lado do ícone: uma mudança que não reintroduz coluna nenhuma e que a
+// guarda acusou como se reintroduzisse. Guarda ancorada num número incidental
+// reprova o legítimo, e guarda que reprova o legítimo é guarda que alguém
+// desliga. O que não pode voltar é a **terceira** coluna, e é a linha abaixo
+// que a proíbe.
+exigir(
+  /grid-template-columns:\s*[\d.]+rem\s+minmax\(0,\s*1fr\);/.test(css),
+  'casco desktop ainda reserva uma segunda coluna vertical',
+);
 exigir(!css.includes('grid-template-columns: 5.25rem 15rem 1fr;'), 'layout antigo de três colunas voltou');
 exigir(!/\.contexto__faixa\s*\{[^}]*flex-direction:\s*column/s.test(css), 'abas voltaram a ser lista vertical');
 exigir(casco.includes('if (telas.length <= 1) return null;'), 'módulo de tela única desenha aba redundante');

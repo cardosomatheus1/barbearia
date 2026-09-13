@@ -55,7 +55,7 @@ import { fraseDoProximo, resumoDoHoje, saudacaoDoBalcao, type ResumoDoHoje } fro
  */
 
 export const metadata: Metadata = {
-  title: 'O dia',
+  title: 'Hoje',
   robots: { index: false, follow: false },
 };
 

@@ -151,7 +151,7 @@ export default async function AbrirComandaPage({ searchParams }: Props) {
     <main className="ui-container painel__conteudo" {...secao('comanda')}>
       {topo}
 
-      <h1 className="painel__titulo">Cobrar</h1>
+      <h1 className="painel__titulo">Comanda</h1>
 
       <AvisoDeRecusa erro={erro} mapa={FALHA} className="painel__aviso" />
 

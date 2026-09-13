@@ -61,6 +61,29 @@ function tituloDaTela(href: string): string | null {
   return achado?.[1]?.trim() ?? null;
 }
 
+
+/**
+ * Contém, e não igual: "Fiado" no menu e "Fiado do mês" na tela é a mesma coisa
+ * dita com mais contexto, e não é o defeito. Os dois testes deste arquivo usam
+ * esta regra — duas noções de "casa" no mesmo arquivo divergiriam no primeiro
+ * ajuste, que é o defeito que este arquivo inteiro existe para vigiar.
+ */
+function casa(a: string, b: string): boolean {
+  return a.toLowerCase().includes(b.toLowerCase()) || b.toLowerCase().includes(a.toLowerCase());
+}
+
+/** `undefined` = não há `page.tsx`; `null` = há, e ele não declara `title`. */
+function tituloDoNavegador(href: string): string | null | undefined {
+  const rota = href.replace(/^\/admin\/?/, '');
+  let fonte: string;
+  try {
+    fonte = readFileSync(join(RAIZ, 'admin', rota, 'page.tsx'), 'utf8');
+  } catch {
+    return undefined;
+  }
+  return /title:\s*'([^']+)'/.exec(fonte)?.[1]?.trim() ?? null;
+}
+
 describe('o nome do menu e o título da tela', () => {
   it('a varredura encontra os títulos que deveria vigiar', () => {
     /**
@@ -85,13 +108,9 @@ describe('o nome do menu e o título da tela', () => {
         if (titulo === null) continue;
 
         const esperado = SINONIMOS[item.nome] ?? item.nome;
-        // Contém, e não igual: "Fiado" no menu e "Fiado do mês" na tela é a
-        // mesma coisa dita com mais contexto, e não é o defeito.
-        const casa =
-          titulo.toLowerCase().includes(esperado.toLowerCase()) ||
-          esperado.toLowerCase().includes(titulo.toLowerCase());
-
-        if (!casa) divergentes.push(`${item.href}: menu "${item.nome}" × tela "${titulo}"`);
+        if (!casa(titulo, esperado)) {
+          divergentes.push(`${item.href}: menu "${item.nome}" × tela "${titulo}"`);
+        }
       }
     }
 
@@ -99,5 +118,41 @@ describe('o nome do menu e o título da tela', () => {
       divergentes,
       'o menu manda para um nome e a tela se apresenta com outro — quem opera procura e não acha',
     ).toEqual([]);
+  });
+
+  it('a aba do navegador também chama a tela pelo nome do menu', () => {
+    /**
+     * O irmão acima lê o `<h1>`, que é o nome **dentro** da tela. Este lê o
+     * `metadata.title`, que é o nome que sai **para fora** dela: a aba do
+     * navegador, o favorito que alguém salva, o título que aparece quando a
+     * recepção tem seis abas abertas e procura a certa.
+     *
+     * Corte medido antes de a guarda existir: **7 das 41 telas do menu** — seis
+     * divergiam ("Auditoria" abrindo a aba "Trilha", "Importar dados" abrindo
+     * "Trazer minha base") e uma não declarava `title` nenhum.
+     *
+     * A ausência é reprovada aqui, ao contrário do `<h1>`, e o motivo é que ela
+     * não produz ausência: o Next cai no `title` do layout, então a aba de
+     * `Preferências` dizia **"Painel"**. Não é uma tela sem nome, é uma tela com
+     * o nome errado — que é exatamente o que este arquivo vigia.
+     */
+    const problemas: string[] = [];
+
+    for (const modulo of MODULOS) {
+      for (const item of modulo.telas) {
+        const titulo = tituloDoNavegador(item.href);
+        if (titulo === undefined) continue;
+        if (titulo === null) {
+          problemas.push(`${item.href}: sem \`title\`, então a aba herda o nome do layout`);
+          continue;
+        }
+        const esperado = SINONIMOS[item.nome] ?? item.nome;
+        if (!casa(titulo, esperado)) {
+          problemas.push(`${item.href}: menu "${item.nome}" × aba "${titulo}"`);
+        }
+      }
+    }
+
+    expect(problemas, 'a aba do navegador chama a tela por outro nome').toEqual([]);
   });
 });

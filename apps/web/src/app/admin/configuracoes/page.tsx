@@ -43,6 +43,8 @@ interface Props {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+export const metadata = { title: 'Preferências' };
+
 export default async function ConfiguracoesPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
   if (!token) redirect('/admin/entrar');

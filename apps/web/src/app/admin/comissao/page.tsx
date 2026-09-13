@@ -55,7 +55,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Comissão',
+  title: 'Comissões',
   robots: { index: false, follow: false },
 };
 

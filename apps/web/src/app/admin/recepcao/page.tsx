@@ -42,7 +42,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Recepção',
+  title: 'Perguntas sem resposta',
   robots: { index: false, follow: false },
 };
 
@@ -110,7 +110,7 @@ export default async function RecepcaoPage({ searchParams }: Props) {
         </form>
       </header>
       <header className="recepcao__topo">
-        <h1 className="titulo">Recepção</h1>
+        <h1 className="titulo">Perguntas sem resposta</h1>
         <p className="recepcao__sub">
           O que as pessoas perguntaram pela sua página e a barbearia não tinha cadastrado para
           responder. Cadastre o que falta e a resposta passa a sair sozinha.

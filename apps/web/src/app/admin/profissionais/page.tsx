@@ -49,7 +49,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Profissionais e jornadas',
+  title: 'Profissionais',
   robots: { index: false, follow: false },
 };
 
@@ -672,7 +672,7 @@ export default async function ProfissionaisPage({ searchParams }: Props) {
         </form>
       </header>
 
-      <h1 className="painel__titulo">Profissionais e jornadas</h1>
+      <h1 className="painel__titulo">Profissionais</h1>
       <p className="painel__sub">
         Quem atende, o que cada um faz e em que horários. A jornada é de cada pessoa — quem folga
         na segunda some da grade da segunda, e só dela.

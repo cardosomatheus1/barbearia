@@ -10,7 +10,7 @@ import { AvisoDeRecusa } from '../aviso-de-recusa';
 import { UploadDeFoto } from './upload-de-foto';
 
 export const metadata: Metadata = {
-  title: 'Fotos',
+  title: 'Fotos e marca',
   robots: { index: false, follow: false },
 };
 

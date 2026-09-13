@@ -37,7 +37,7 @@ import { FalhaDaLeitura } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Plano',
+  title: 'Seu plano Barber Dock',
   robots: { index: false, follow: false },
 };
 
@@ -201,7 +201,7 @@ export default async function PlanoPage({
     return (
       <main className="ui-container painel__conteudo" {...secao('plano')}>
         {topo}
-        <h1 className="painel__titulo">Plano</h1>
+        <h1 className="painel__titulo">Seu plano Barber Dock</h1>
         <FalhaDaLeitura code={resposta.code} href="/admin/plano" oque="o plano" />
       </main>
     );
@@ -220,7 +220,7 @@ export default async function PlanoPage({
   return (
     <main className="ui-container painel__conteudo" {...secao('plano')}>
       {topo}
-      <h1 className="painel__titulo">Plano</h1>
+      <h1 className="painel__titulo">Seu plano Barber Dock</h1>
       <p className="painel__sub">O que a barbearia contratou, e o que vem junto.</p>
 
       {parametros.trocado ? (

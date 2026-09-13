@@ -33,7 +33,7 @@ import { ROTULO_DO_ESTADO_DO_PEDIDO, ROTULO_DO_PEDIDO_DO_TITULAR } from '@barbea
  */
 
 export const metadata: Metadata = {
-  title: 'Pedidos de dados',
+  title: 'Privacidade',
   robots: { index: false, follow: false },
 };
 

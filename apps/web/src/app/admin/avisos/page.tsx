@@ -23,7 +23,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Avisos',
+  title: 'Avisos ao cliente',
   robots: { index: false, follow: false },
 };
 
@@ -100,7 +100,7 @@ export default async function AvisosPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('avisos')}>
         {topo}
-        <h1 className="painel__titulo">Avisos</h1>
+        <h1 className="painel__titulo">Avisos ao cliente</h1>
         <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {FALHA[resposta.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">Voltar ao dia</a>

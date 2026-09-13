@@ -35,7 +35,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Trilha',
+  title: 'Auditoria',
   robots: { index: false, follow: false },
 };
 
