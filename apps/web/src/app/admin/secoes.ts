@@ -48,6 +48,15 @@ export interface Destino {
    * ele passa a dividir a barra superior com a busca global.
    */
   readonly posicao?: 'menu' | 'utilitario';
+  /**
+   * As palavras que a pessoa **digita** na busca e que não cabem na legenda.
+   *
+   * `nota` é o que a tela diz de si na aba; isto é como o balcão chama a coisa.
+   * São perguntas diferentes, e por isso são campos diferentes — enfiar
+   * "shampoo" e "pomada" na legenda do Estoque pioraria a aba para melhorar a
+   * busca. Invisível na tela, e a guarda de vocabulário é quem o mantém honesto.
+   */
+  readonly busca?: string;
 }
 
 export interface DestinoInterno {
@@ -61,6 +70,15 @@ export interface DestinoInterno {
   readonly pai?: string;
   readonly recurso?: string;
   readonly permissao?: readonly Permissao[];
+  /**
+   * As palavras que a pessoa **digita** na busca e que não cabem na legenda.
+   *
+   * `nota` é o que a tela diz de si na aba; isto é como o balcão chama a coisa.
+   * São perguntas diferentes, e por isso são campos diferentes — enfiar
+   * "shampoo" e "pomada" na legenda do Estoque pioraria a aba para melhorar a
+   * busca. Invisível na tela, e a guarda de vocabulário é quem o mantém honesto.
+   */
+  readonly busca?: string;
 }
 
 export interface ModuloDoPainel {
@@ -104,13 +122,13 @@ export const MODULOS = [
     id: 'clientes',
     nome: 'Clientes',
     telas: [
-      { href: '/admin/clientes', nome: 'Clientes', secao: 'clientes', molde: 'cadastro', nota: 'buscar, reconhecer e agir sobre a base', grupo: 'A base', permissao: ['customers.view'] },
+      { href: '/admin/clientes', nome: 'Clientes', secao: 'clientes', molde: 'cadastro', nota: 'buscar o cliente e abrir a ficha dele', busca: 'cadastro base telefone aniversario', grupo: 'A base', permissao: ['customers.view'] },
       { href: '/admin/recados', nome: 'Recados', secao: 'recados', molde: 'gestao', nota: 'recado escrito pelo cliente, sem nota', grupo: 'O que o cliente disse', permissao: ['feedback.view'] },
       { href: '/admin/recepcao', nome: 'Perguntas sem resposta', secao: 'recepcao', molde: 'operacional', nota: 'perguntas que o site não soube responder', grupo: 'O que o cliente disse', permissao: ['feedback.view'] },
       { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', molde: 'gestao', nota: 'a nota que o cliente deu, e a nota baixa a tratar', grupo: 'O que o cliente disse', permissao: ['reviews.view'] },
     ],
     // A ficha pertence à mesma área, embora continue sendo aberta por id.
-    dentro: [{ secao: 'cliente', molde: 'cadastro', nome: 'Ficha do cliente', nota: 'histórico, preferências e relacionamento', pai: 'clientes', permissao: ['customers.view'] }],
+    dentro: [{ secao: 'cliente', molde: 'cadastro', nome: 'Ficha do cliente', nota: 'fotos do corte, preferências de máquina e barba, histórico e observações', busca: 'foto antes depois corte preferencia maquina degrade barba alergia observacao anotacao ficha', pai: 'clientes', permissao: ['customers.view'] }],
   },
   {
     id: 'financeiro',
@@ -144,12 +162,12 @@ export const MODULOS = [
     id: 'barbearia',
     nome: 'Minha barbearia',
     telas: [
-      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', molde: 'cadastro', nota: 'preço, duração e regras do serviço', grupo: 'O que a casa vende', permissao: ['settings.manage'] },
+      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', molde: 'cadastro', nota: 'preço, duração e ficha técnica do serviço', busca: 'corte barba cardapio catalogo ficha tecnica consumo', grupo: 'O que a casa vende', permissao: ['settings.manage'] },
       { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', molde: 'cadastro', nota: 'cobrar menos na hora vazia e mais na cheia', grupo: 'O que a casa vende', permissao: ['settings.manage'] },
       { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', molde: 'cadastro', nota: 'combos pagos adiantado, como 5 cortes', grupo: 'O que a casa vende', permissao: ['appointments.view'] },
       { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', molde: 'cadastro', nota: 'barbeiros, jornadas e metas', grupo: 'Quem atende, e com o quê', permissao: ['settings.manage'] },
       { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', molde: 'cadastro', nota: 'cadeiras, lavatórios e salas', grupo: 'Quem atende, e com o quê', permissao: ['settings.manage'] },
-      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', molde: 'cadastro', nota: 'produtos, contagem e ficha de consumo', grupo: 'Quem atende, e com o quê', permissao: ['inventory.view'] },
+      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', molde: 'cadastro', nota: 'produtos e material de consumo: contagem, alerta de falta e custo', busca: 'shampoo pomada material insumo inventario compra fornecedor', grupo: 'Quem atende, e com o quê', permissao: ['inventory.view'] },
     ],
     dentro: [],
   },
@@ -287,6 +305,9 @@ export interface OrientacaoDaTela {
   readonly secao: string;
   readonly nome: string;
   readonly nota: string;
+  /** Ausente na tela interna, que não tem endereço próprio: a ficha abre por id. */
+  readonly href?: string;
+  readonly busca?: string;
   readonly pai?: string;
   readonly listada: boolean;
   readonly molde: MoldeDePagina;
@@ -311,6 +332,8 @@ export function orientacoesVisiveis(
       secao: tela.secao,
       nome: tela.nome,
       nota: tela.nota,
+      href: tela.href,
+      ...(tela.busca !== undefined ? { busca: tela.busca } : {}),
       listada: tela.posicao !== 'utilitario',
       molde: tela.molde,
     }));
@@ -322,6 +345,7 @@ export function orientacoesVisiveis(
       secao: tela.secao,
       nome: tela.nome,
       nota: tela.nota,
+      ...(tela.busca !== undefined ? { busca: tela.busca } : {}),
       ...(tela.pai !== undefined ? { pai: tela.pai } : {}),
       listada: false,
       molde: tela.molde,
@@ -329,6 +353,32 @@ export function orientacoesVisiveis(
 
     return [...listadas, ...internas];
   });
+}
+
+/**
+ * O que a busca global oferece.
+ *
+ * Derivado de `orientacoesVisiveis`, e é por isso que existe: o casco montava a
+ * lista com um `flatMap` sobre `modulo.telas`, então as quatro telas **internas**
+ * — Ficha do cliente, Meu dia, Meus números, Primeiros passos — nunca entraram.
+ * A Ficha é a tela mais rica do produto (fotos do corte, preferências de máquina
+ * e barba, histórico) e a única sem porta no menu: quem digitava "foto" recebia
+ * "Fotos e marca", que é o logo da página pública, e concluía que o produto não
+ * guardava foto de corte.
+ *
+ * Tela interna não tem endereço próprio — a ficha abre por id —, então o destino
+ * é a **porta** do módulo, que é a mesma que a migalha já usa para a volta.
+ */
+export function destinosDaBusca(
+  modulos: readonly ModuloDoPainel[],
+): readonly { href: string; nome: string; modulo: string; nota: string; busca: string }[] {
+  return orientacoesVisiveis(modulos).map((tela) => ({
+    href: tela.href ?? tela.moduloHref,
+    nome: tela.nome,
+    modulo: tela.moduloNome,
+    nota: tela.nota,
+    busca: tela.busca ?? '',
+  }));
 }
 
 /** Os destinos que só existem quando a plataforma liga o recurso. */

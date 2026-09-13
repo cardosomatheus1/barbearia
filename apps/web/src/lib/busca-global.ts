@@ -4,6 +4,8 @@ export interface DestinoDaBuscaGlobal {
   readonly nome: string;
   readonly modulo: string;
   readonly nota: string;
+  /** Sinônimos que o balcão digita e que não cabem na legenda. Nunca exibidos. */
+  readonly busca?: string;
 }
 
 export const normalizarBusca = (texto: string): string =>
@@ -25,6 +27,6 @@ export function filtrarDestinos(
   const q = normalizarBusca(consulta);
   if (!q) return destinos.slice(0, limite);
   return destinos
-    .filter((destino) => normalizarBusca(`${destino.nome} ${destino.modulo} ${destino.nota}`).includes(q))
+    .filter((destino) => normalizarBusca(`${destino.nome} ${destino.modulo} ${destino.nota} ${destino.busca ?? ''}`).includes(q))
     .slice(0, limite);
 }

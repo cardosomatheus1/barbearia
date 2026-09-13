@@ -28,7 +28,7 @@ import { BuscaGlobal, type DestinoDaBuscaGlobal } from './busca-global';
  * somente pelo comportamento que precisa de teclado, foco e consulta incremental.
  */
 
-import { modulosVisiveis, orientacoesVisiveis, telasDoMenu, utilitariosVisiveis, type Modulo } from './secoes';
+import { destinosDaBusca, modulosVisiveis, orientacoesVisiveis, telasDoMenu, utilitariosVisiveis, type Modulo } from './secoes';
 
 export type { Modulo, Secao } from './secoes';
 export { secao, SECOES_POR_MODULO } from './secoes';
@@ -86,14 +86,7 @@ export function Casco({
   const orientacoes = orientacoesVisiveis(modulos);
   const modulosPrincipais = modulos.filter((modulo) => modulo.categoria !== 'configuracao');
   const moduloConfiguracao = modulos.find((modulo) => modulo.categoria === 'configuracao');
-  const destinosDaBusca: readonly DestinoDaBuscaGlobal[] = modulos.flatMap((modulo) =>
-    modulo.telas.map((tela) => ({
-      href: tela.href,
-      nome: tela.nome,
-      modulo: modulo.nome,
-      nota: tela.nota,
-    })),
-  );
+  const destinos: readonly DestinoDaBuscaGlobal[] = destinosDaBusca(modulos);
 
   const iniciais = nome
     .split(/\s+/)
@@ -153,7 +146,7 @@ export function Casco({
         </div>
 
         <div className="contexto__acoes">
-          <BuscaGlobal destinos={destinosDaBusca} />
+          <BuscaGlobal destinos={destinos} />
           {utilitariosVisiveis(modulos).map((tela) => (
             <a
               className="contexto__atalho"

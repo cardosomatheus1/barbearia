@@ -19,7 +19,14 @@ exigir(busca.includes("evento.ctrlKey || evento.metaKey") && busca.includes("key
 exigir(busca.includes('/admin/busca?q='), 'a ilha precisa consultar a ponte autenticada do admin');
 exigir(busca.includes('filtrarDestinos(destinos, consulta'), 'funções precisam ser buscadas sobre os destinos permitidos recebidos do servidor');
 exigir(casco.includes('const modulos = modulosVisiveis(recursos, permissoes)'), 'a busca precisa nascer depois do recorte de recursos/permissões');
-exigir(casco.includes('<BuscaGlobal destinos={destinosDaBusca} />'), 'o casco precisa montar a busca global');
+// A conferência é a **origem** da lista, não o nome da variável que a carrega.
+// Pinado em `destinos={destinosDaBusca}`, este `exigir` reprovou o bloco 141,
+// que trocou o `flatMap` escrito à mão pela função derivada de `secoes.ts` — a
+// mudança que fez as telas internas finalmente entrarem na busca. O que
+// importa provar é que a ilha recebe o resultado de `destinosDaBusca(modulos)`,
+// com `modulos` já recortado por permissão na linha acima.
+exigir(/<BuscaGlobal destinos=\{[a-zA-Z]+\} \/>/.test(casco), 'o casco precisa montar a busca global');
+exigir(casco.includes('destinosDaBusca(modulos)'), 'a busca não sai do registro recortado por permissão');
 exigir(!casco.includes('MODULOS.flatMap((modulo) =>\n    modulo.telas.map'), 'não passe o registro bruto para a ilha antes do recorte de permissão');
 
 exigir(rota.includes("permissoes.has('customers.view')"), 'busca de cliente precisa respeitar customers.view');
