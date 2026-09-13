@@ -3,6 +3,7 @@ import { painelOuDesvio, podeNaTela } from '@/lib/painel';
 import { lerSessaoGestor } from '@/lib/sessao-gestor';
 import { filaManualNaApi, textosManuaisNaApi, configuracoesManuaisNaApi } from '@/lib/admin-api';
 import { acaoSair } from '../../acoes';
+import { FalhaDaLeitura } from '../../falha-da-leitura';
 import { secao } from '../../secoes';
 import { PainelManual } from './painel';
 export const metadata = { title: 'Mensagens para enviar', robots: { index: false, follow: false } };
@@ -20,7 +21,7 @@ export default async function WhatsAppManual({ searchParams }: { searchParams: P
           </button>
         </form>
       </header>
-<h1 className="painel__titulo">Mensagens para enviar</h1><p>Seu acesso precisa permitir campanhas e consulta de clientes para operar esta fila.</p></main>;
+<h1 className="painel__titulo">Mensagens para enviar</h1><FalhaDaLeitura code="forbidden" href="/admin/whatsapp/manual" oque="a fila de envio" /></main>;
   const [fila, textos, configuracoes] = await Promise.all([filaManualNaApi(token, query.antes, query.visao === 'historico' ? 'historico' : 'pendentes'), textosManuaisNaApi(token), configuracoesManuaisNaApi(token)]);
   return <main className="ui-container painel__conteudo" {...secao('whatsapp-manual')}>
       <header className="painel__topo">
