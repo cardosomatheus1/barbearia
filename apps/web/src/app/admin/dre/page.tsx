@@ -32,7 +32,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Resultado',
+  title: 'Lucro',
   robots: { index: false, follow: false },
 };
 
@@ -167,7 +167,7 @@ export default async function DrePage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('dre')}>
         {topo}
-        <h1 className="painel__titulo">Resultado</h1>
+        <h1 className="painel__titulo">Lucro</h1>
         <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(dre.code)}>
           {FALHA[dre.code] ?? FALHA['request_failed']}{' '}
           <a className="ui-button ui-button--secondary painel__saida" href="/admin/dia">
@@ -190,7 +190,7 @@ export default async function DrePage({ searchParams }: Props) {
     <main className="ui-container painel__conteudo" {...secao('dre')}>
       {topo}
 
-      <h1 className="painel__titulo">Resultado</h1>
+      <h1 className="painel__titulo">Lucro</h1>
       <p className="painel__sub">
         De {dataCurta(dre.dados.de)} a {dataCurta(dre.dados.ate)}, comparado com{' '}
         {dataCurta(dre.dados.comparadoDe)} a {dataCurta(dre.dados.comparadoAte)}.

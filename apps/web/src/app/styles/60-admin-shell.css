@@ -597,7 +597,16 @@
    dois menus antes de chegar ao conteúdo. */
 @media (min-width: 1024px) {
   .casco {
-    grid-template-columns: 14rem minmax(0, 1fr);
+    /* A coluna mede o próprio conteúdo, em vez de um número escolhido à mão.
+       Foi ajustada três vezes em três blocos — 5,25rem para 13, 13 para 14 —
+       e nas duas últimas por um nome de área novo que não cabia por poucos
+       pixels: "Minha barbearia" pedia 211 contra 208, "Cardápio e equipe" pede
+       221 contra 223. Largura fixa transforma **renomear uma área** numa
+       operação que pode cortar o rótulo de todas as outras, e o corte é
+       silencioso: `text-overflow: ellipsis` não falha, só some com a palavra.
+       O piso de 12rem existe para a coluna não encolher até virar de novo o
+       trilho de ícones mudos do bloco 138. */
+    grid-template-columns: minmax(12rem, max-content) minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
     height: 100dvh;
     overflow: hidden;

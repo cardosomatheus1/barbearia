@@ -59,9 +59,11 @@ for (const secao of unicas) {
 // guarda acusou como se reintroduzisse. Guarda ancorada num número incidental
 // reprova o legítimo, e guarda que reprova o legítimo é guarda que alguém
 // desliga. O que não pode voltar é a **terceira** coluna, e é a linha abaixo
-// que a proíbe.
+// que a proíbe. A primeira coluna aceita as duas formas — um valor fixo ou um
+// `minmax()` que se dimensiona pelo conteúdo —, porque o que se prova aqui é
+// que existem **duas** faixas, não qual é a largura da primeira.
 exigir(
-  /grid-template-columns:\s*[\d.]+rem\s+minmax\(0,\s*1fr\);/.test(css),
+  /grid-template-columns:\s*(?:[\d.]+rem|minmax\([^)]*\))\s+minmax\(0,\s*1fr\);/.test(css),
   'casco desktop ainda reserva uma segunda coluna vertical',
 );
 exigir(!css.includes('grid-template-columns: 5.25rem 15rem 1fr;'), 'layout antigo de três colunas voltou');

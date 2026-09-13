@@ -139,8 +139,8 @@ export const MODULOS = [
       { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', molde: 'gestao', nota: 'contas da casa a pagar e a receber', grupo: 'Fechamento', permissao: ['finance.view'] },
       { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', molde: 'gestao', nota: 'o que cada barbeiro tem a receber no mês', grupo: 'Fechamento', permissao: ['commission.view_own', 'commission.view_all'] },
       { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', molde: 'configuracao', nota: 'CNPJ, regime e notas emitidas', grupo: 'Fechamento', recurso: 'fiscal', permissao: ['fiscal.settings', 'finance.view'] },
-      { href: '/admin/painel', nome: 'Painel', secao: 'painel', molde: 'gestao', nota: 'faturamento, ocupação e as horas vazias da semana', grupo: 'O mês', busca: 'faturamento receita relatorio grafico heatmap hora vazia ocupacao resumo mes', permissao: ['reports.operational'] },
-      { href: '/admin/dre', nome: 'Resultado', secao: 'dre', molde: 'gestao', nota: 'lucro: a receita menos custo e despesa', grupo: 'O mês', busca: 'lucro dre margem resultado', permissao: ['finance.view_profit'] },
+      { href: '/admin/painel', nome: 'Movimento do mês', secao: 'painel', molde: 'gestao', nota: 'faturamento, ocupação e as horas vazias da semana', grupo: 'O mês', busca: 'faturamento receita relatorio grafico heatmap hora vazia ocupacao resumo mes', permissao: ['reports.operational'] },
+      { href: '/admin/dre', nome: 'Lucro', secao: 'dre', molde: 'gestao', nota: 'o que sobrou no período: receita menos custo e despesa', grupo: 'O mês', busca: 'lucro dre margem resultado', permissao: ['finance.view_profit'] },
     ],
     dentro: [{ secao: 'meus-numeros', molde: 'gestao', nome: 'Meus números', nota: 'seu resultado e suas comissões', pai: 'comissao', permissao: ['commission.view_own'] }],
   },
@@ -160,7 +160,7 @@ export const MODULOS = [
   },
   {
     id: 'barbearia',
-    nome: 'A casa',
+    nome: 'Cardápio e equipe',
     telas: [
       { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', molde: 'cadastro', nota: 'preço, duração e ficha técnica do serviço', busca: 'corte barba cardapio catalogo ficha tecnica consumo', grupo: 'O que a casa vende', permissao: ['settings.manage'] },
       { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', molde: 'cadastro', nota: 'cobrar menos na hora vazia e mais na cheia', grupo: 'O que a casa vende', permissao: ['settings.manage'] },

@@ -21,7 +21,7 @@ import { secao } from '../secoes';
 import { marcaDaRecusa } from '../falha-da-leitura';
 
 export const metadata: Metadata = {
-  title: 'Painel',
+  title: 'Movimento do mês',
   robots: { index: false, follow: false },
 };
 
@@ -258,7 +258,7 @@ export default async function PainelPage({ searchParams }: Props) {
     return (
       <main className="ui-container painel__conteudo" {...secao('painel')}>
         {topo}
-        <h1 className="painel__titulo">Painel</h1>
+        <h1 className="painel__titulo">Movimento do mês</h1>
         <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(operacao.code)}>
           {semPermissao ? (
             <>
@@ -400,7 +400,7 @@ export default async function PainelPage({ searchParams }: Props) {
 
       <div className="painel-v6__cabeca">
         <div>
-          <h1 className="painel__titulo">Painel</h1>
+          <h1 className="painel__titulo">Movimento do mês</h1>
           <p className="painel__sub">{periodoTexto}. Resultado, capacidade, equipe e o que merece decisão.</p>
         </div>
         <nav aria-label="Período do painel" className="balcao__regua painel-periodos">
