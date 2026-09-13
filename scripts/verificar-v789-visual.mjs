@@ -22,7 +22,10 @@ const exigir = (condicao, mensagem) => { if (!condicao) falhas.push(mensagem); }
 
 // V7 — cada seção declara um contrato visual na mesma fonte da navegação.
 const declaracoes = [...secoes.matchAll(/secao: '([^']+)',\s*molde: '([^']+)'/g)];
-exigir(declaracoes.length === 45, `V7 esperava 45 seções com molde; encontrou ${declaracoes.length}`);
+// 44 desde o bloco 145: `avisos` deixou de ser seção própria e virou a metade
+// *Do horário marcado* de Mensagens automáticas. A contagem é escrita de
+// propósito — tela nova entra com molde declarado ou o número não bate.
+exigir(declaracoes.length === 44, `V7 esperava 44 seções com molde; encontrou ${declaracoes.length}`);
 const permitidos = new Set(['operacional', 'cadastro', 'gestao', 'configuracao', 'excecao']);
 for (const [, secao, molde] of declaracoes) {
   exigir(permitidos.has(molde), `V7: ${secao} usa molde desconhecido ${molde}`);

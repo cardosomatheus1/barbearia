@@ -763,7 +763,7 @@ export async function acaoAvisos(form: FormData): Promise<void> {
     diasParaRetorno: numero(form, 'diasParaRetorno', 45),
   });
 
-  if (!resultado.ok) return falhar('/admin/avisos', resultado);
-  redirect('/admin/avisos?salvo=1');
+  if (!resultado.ok) return falhar('/admin/automacoes', resultado);
+  redirect('/admin/automacoes?salvo=1#do-horario');
 }
 

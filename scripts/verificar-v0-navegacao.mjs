@@ -16,7 +16,12 @@ const LEGADO = [
   '/admin/painel', '/admin/assistente', '/admin/dia', '/admin/agenda', '/admin/fila',
   '/admin/recados', '/admin/recepcao', '/admin/avaliacoes', '/admin/caixa', '/admin/comanda',
   '/admin/fiado', '/admin/financeiro', '/admin/comissao', '/admin/dre', '/admin/whatsapp',
-  '/admin/campanhas', '/admin/automacoes', '/admin/avisos', '/admin/retencao', '/admin/fidelidade',
+  // `/admin/avisos` saiu desta lista no bloco 145, e é a primeira baixa dela.
+  // O destino não sumiu: virou a metade *Do horário marcado* de Mensagens
+  // automáticas, e a rota antiga continua existindo como redirecionamento —
+  // favorito e link mandado por WhatsApp seguem chegando. O que esta lista
+  // vigia é destino perdido **em silêncio**, e este saiu por escrito.
+  '/admin/campanhas', '/admin/automacoes', '/admin/retencao', '/admin/fidelidade',
   '/admin/catalogo', '/admin/precos', '/admin/pacotes', '/admin/clube', '/admin/profissionais',
   '/admin/recursos', '/admin/estoque', '/admin/fotos', '/admin/franquia', '/admin/fiscal',
   '/admin/chaves', '/admin/webhooks', '/admin/equipe', '/admin/unidades', '/admin/plano',

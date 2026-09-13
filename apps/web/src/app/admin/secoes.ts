@@ -150,8 +150,7 @@ export const MODULOS = [
     telas: [
       { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', molde: 'configuracao', nota: 'conexões e formas de enviar mensagens', grupo: 'Relacionamento', permissao: ['whatsapp.manage'] },
       { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', molde: 'gestao', nota: 'escolher um público e mandar promoção', grupo: 'Relacionamento', busca: 'promocao disparo publico sumido inativo reativar', permissao: ['marketing.send'] },
-      { href: '/admin/automacoes', nome: 'Automações', secao: 'automacoes', molde: 'configuracao', nota: 'mensagem com motivo próprio: aniversário, sumiço, pós-atendimento', grupo: 'Relacionamento', permissao: ['marketing.send'] },
-      { href: '/admin/avisos', nome: 'Avisos ao cliente', secao: 'avisos', molde: 'configuracao', nota: 'lembrete e confirmação do horário marcado', grupo: 'Relacionamento', recurso: 'avisos', permissao: ['settings.manage'] },
+      { href: '/admin/automacoes', nome: 'Mensagens automáticas', secao: 'automacoes', molde: 'configuracao', nota: 'o que a casa manda sozinha: lembrete do horário, aniversário, sumiço', grupo: 'Relacionamento', busca: 'aviso lembrete confirmacao retorno automacao gatilho aniversario sumico pos-atendimento', permissao: ['marketing.send', 'settings.manage'] },
       { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', molde: 'gestao', nota: 'quem está sumindo, e por quê (só a leitura)', grupo: 'Retorno', busca: 'churn risco sumido inativo perdido', permissao: ['customers.view', 'customers.view_notes', 'reviews.view'] },
       { href: '/admin/fidelidade', nome: 'Fidelidade', secao: 'fidelidade', molde: 'gestao', nota: 'pontos, visitas ou cashback', grupo: 'Retorno', permissao: ['appointments.view'] },
       { href: '/admin/clube', nome: 'Clube', secao: 'clube', molde: 'gestao', nota: 'mensalidade que o cliente paga à casa', grupo: 'Retorno', permissao: ['appointments.view'] },

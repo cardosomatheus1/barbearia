@@ -36,6 +36,9 @@ import { lerRascunho, lerRecusa, lerSessaoGestor } from '@/lib/sessao-gestor';
 import { acaoLigarAutomacao, acaoSalvarAutomacao, acaoSair } from '../acoes';
 import { FilaParada } from '../fila-parada';
 import { secao } from '../secoes';
+import { AvisosDoHorario } from '../avisos/componentes';
+import { avisos } from '@/lib/admin-api';
+import { recursoNaTela } from '@/lib/painel';
 import { FalhaDaLeitura } from '../falha-da-leitura';
 
 /**
@@ -57,7 +60,7 @@ import { FalhaDaLeitura } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Automações',
+  title: 'Mensagens automáticas',
   robots: { index: false, follow: false },
 };
 
@@ -263,6 +266,29 @@ export default async function AutomacoesPage({ searchParams }: Props) {
    * pior que não avisar.
    */
   const podeVerCanal = podeNaTela(estado, 'whatsapp.manage');
+
+  /**
+   * A metade presa ao horário marcado, que era a tela "Avisos ao cliente".
+   *
+   * Seis avaliadores cegos, em quatro rodadas, travaram na mesma pergunta —
+   * *"fazer o sistema mandar sozinho um lembrete 24h antes"* — com confiança 2
+   * de 5. As duas telas configuravam mensagem automática, e a fronteira era
+   * *o que dispara*: o horário marcado de um lado, o comportamento do cliente
+   * do outro. Nenhum dos dois nomes carregava isso, e "Automações" é a palavra
+   * que descreve as duas.
+   *
+   * Duas guardas de escopo, e nenhuma delas é `@Exige` somado:
+   *
+   * - **permissão**: esta metade pede `settings.manage`, a outra pede
+   *   `marketing.send`. A entrada do menu declara as duas e o registro casa por
+   *   `some()`, então quem tem qualquer uma continua vendo a tela — somar seria
+   *   uma tela a menos para quem tem só uma, que é a armadilha do bloco 144;
+   * - **recurso**: `avisos` é interruptor da plataforma. A entrada do menu
+   *   **não** pode carregá-lo, senão desligá-lo esconderia as automações junto
+   *   — então ele é conferido aqui dentro, e a metade some sem levar a outra.
+   */
+  const temAvisos = recursoNaTela(estado, 'avisos');
+  const podeAvisos = temAvisos && podeNaTela(estado, 'settings.manage');
   const [resposta, canal, templates, saudeDaFila] = await Promise.all([
     podeMexer ? automacoesNaApi(token) : Promise.resolve(null),
     podeVerCanal ? conexaoWhatsAppNaApi(token) : Promise.resolve(null),
@@ -270,6 +296,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
     // A fila anda? Nenhuma tela sabia responder, e as quatro afirmavam que sim.
     podeMexer ? filaNaApi(token) : Promise.resolve(null),
   ]);
+  const aviso = podeAvisos ? await avisos(token) : null;
   /**
    * Sem `marketing.send` não há automação para ver nem para ligar.
    *
@@ -280,7 +307,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
    *
    * Some do menu desde o bloco 126; quem chega pelo endereço lê a frase.
    */
-  if (!podeMexer) {
+  if (!podeMexer && !podeAvisos) {
     return (
       <main className="ui-container painel__conteudo" {...secao('automacoes')}>
       <header className="painel__topo">
@@ -293,7 +320,7 @@ export default async function AutomacoesPage({ searchParams }: Props) {
           </button>
         </form>
       </header>
-        <h1 className="painel__titulo">Automações</h1>
+        <h1 className="painel__titulo">Mensagens automáticas</h1>
       <ContextoDeEnvio canal={canal?.ok ? canal.dados.canal : null} />
         <FalhaDaLeitura code="forbidden" href="/admin/automacoes" oque="as automações" />
       </main>
@@ -359,16 +386,25 @@ export default async function AutomacoesPage({ searchParams }: Props) {
         </form>
       </header>
 
-      <h1 className="painel__titulo">Automações</h1>
+      <h1 className="painel__titulo">Mensagens automáticas</h1>
       <ContextoDeEnvio canal={canal?.ok ? canal.dados.canal : null} />
       {/* O par da frase que a tela de campanhas ganhou: as duas ficam lado a
           lado no menu, mandam pelo mesmo canal e têm formulário parecido, e
           quem abre pela primeira vez não tem como saber qual usar. */}
       <p className="painel__sub">
-        Uma regra que fica ligada e manda <strong>sozinha</strong>, toda vez que o fato
-        acontecer com alguém. Para falar hoje com uma lista escolhida agora, use{' '}
-        <a href="/admin/campanhas">Campanhas</a>.
+        Tudo que a casa manda <strong>sozinha</strong>. Para falar hoje com uma lista escolhida
+        agora, use <a href="/admin/campanhas">Campanhas</a>.
       </p>
+
+      {aviso?.ok ? (
+        <AvisosDoHorario
+          erro={erro}
+          fuso={estado.empresa.timezone}
+          log={aviso.dados.log}
+          salvo={query['salvo'] === '1'}
+          settings={aviso.dados.settings}
+        />
+      ) : null}
 
       <FilaParada fila={fila} fuso={estado.empresa.timezone} />
       {/* A frase do domínio primeiro: ela nomeia o campo. O mapa por código

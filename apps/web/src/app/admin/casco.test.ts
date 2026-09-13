@@ -215,6 +215,52 @@ describe('o CSS acompanha o casco', () => {
     expect(semRegra.filter((s) => listadas.has(s))).toEqual([]);
   });
 
+  it('a tela fundida de mensagens não herda o interruptor de uma das metades', () => {
+    /**
+     * `avisos` é recurso da plataforma, e no registro o `recurso` tem semântica
+     * de **e**: `modulosVisiveis` só mantém a tela se o tenant o tiver. A
+     * permissão, ao contrário, casa por `some()` — qualquer uma serve.
+     *
+     * O bloco 145 juntou "Avisos ao cliente" e "Automações" numa tela só. Se a
+     * entrada fundida carregasse `recurso: 'avisos'`, desligar o interruptor da
+     * plataforma esconderia **as automações junto** — uma metade levando a
+     * outra embora, sem que ninguém tivesse decidido isso. O interruptor passou
+     * a ser conferido dentro da página, onde ele some sozinho.
+     *
+     * E a permissão precisa listar as duas: somar seria uma tela a menos para
+     * quem tem só `settings.manage` ou só `marketing.send`, que é a armadilha
+     * que o bloco 144 documentou.
+     */
+    /**
+     * O tipo é alargado de propósito: `MODULOS` é `as const`, então o `flatMap`
+     * devolve a união dos literais de cada tela e o `tsc` recusa a comparação —
+     * enquanto o `vitest`, que roda por esbuild, aceita sem olhar. É a armadilha
+     * que o repositório já documenta: verde na suíte não quer dizer que os tipos
+     * batem, e quem cobra os dois é o `pnpm verify`.
+     */
+    interface NoRegistro {
+      readonly href: string;
+      readonly recurso?: string;
+      readonly permissao?: readonly string[];
+    }
+    // A anotação no retorno do `flatMap` é o que alarga cada literal: sem ela o
+    // `tsc` tenta reconciliar tuplas de telas diferentes entre si.
+    const telas = MODULOS.flatMap((modulo): NoRegistro[] => modulo.telas.map((t) => t));
+    const tela = telas.find((t) => t.href === '/admin/automacoes');
+
+    expect(tela, 'a tela fundida de mensagens sumiu do registro').toBeDefined();
+
+    expect(
+      tela?.recurso,
+      'a entrada fundida herdou o recurso de uma das metades: desligá-lo esconde a outra',
+    ).toBeUndefined();
+
+    expect(
+      [...(tela?.permissao ?? [])].sort(),
+      'a tela fundida precisa aceitar qualquer uma das duas permissões',
+    ).toEqual(['marketing.send', 'settings.manage']);
+  });
+
   it('a caixa do cliente não exige as duas permissões para abrir', () => {
     /**
      * O bloco 144 juntou recado e nota baixa numa tela só, e a armadilha dessa
