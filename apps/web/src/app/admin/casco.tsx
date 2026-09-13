@@ -51,10 +51,10 @@ const ICONE: Readonly<Record<Modulo, ReactNode>> = {
   hoje: traco('M5 4v3M19 4v3M4 9h16M5 6h14v14H5zM8 13h3M8 16h5'),
   agenda: traco('M4 5h16v15H4zM8 3v4M16 3v4M4 9h16M8 13h3M14 13h2M8 17h2'),
   clientes: traco('M15 19v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9 11a4 4 0 100-8 4 4 0 000 8zM17 11a3 3 0 100-6M19 19v-1a4 4 0 00-3-3.87'),
-  atendimento: traco('M5 19v-1a4 4 0 014-4h6a4 4 0 014 4v1M12 11a4 4 0 100-8 4 4 0 000 8z'),
   financeiro: traco('M3 8h18v10H3zM3 8l2-3h14l2 3M12 12v3'),
   crescimento: traco('M4 10v4h3l6 4V6l-6 4H4zM17 9a4 4 0 010 6'),
-  gestao: traco('M4 5h16v14H4zM8 15l3-3 2 2 4-5M8 9h2'),
+  barbearia: traco('M6.5 6.5l11 11M17.5 6.5l-11 11M5 19.5a2 2 0 104 0 2 2 0 00-4 0zM15 19.5a2 2 0 104 0 2 2 0 00-4 0z'),
+  lojas: traco('M4 9h16l-1-4H5zM5 9v10h14V9M9 19v-6h6v6'),
   configuracoes: traco('M4 7h10M18 7h2M4 12h2M10 12h10M4 17h8M16 17h4'),
 };
 

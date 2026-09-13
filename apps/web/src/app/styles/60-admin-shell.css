@@ -140,10 +140,10 @@
 .casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje'],
 .casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda'],
 .casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes'],
-.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'],
+.casco:has([data-modulo-atual='barbearia']) .trilho__botao[data-modulo='barbearia'],
+.casco:has([data-modulo-atual='lojas']) .trilho__botao[data-modulo='lojas'],
 .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'],
 .casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento'],
-.casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao'],
 .casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes'] {
   color: var(--color-accent);
   background: linear-gradient(
@@ -156,18 +156,18 @@
 .casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje'] svg,
 .casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda'] svg,
 .casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes'] svg,
-.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento'] svg,
+.casco:has([data-modulo-atual='barbearia']) .trilho__botao[data-modulo='barbearia'] svg,
+.casco:has([data-modulo-atual='lojas']) .trilho__botao[data-modulo='lojas'] svg,
 .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro'] svg,
 .casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento'] svg,
-.casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao'] svg,
 .casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes'] svg { opacity: 1; }
 .casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje']::after,
 .casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda']::after,
 .casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes']::after,
-.casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
+.casco:has([data-modulo-atual='barbearia']) .trilho__botao[data-modulo='barbearia']::after,
+.casco:has([data-modulo-atual='lojas']) .trilho__botao[data-modulo='lojas']::after,
 .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
 .casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento']::after,
-.casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao']::after,
 .casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes']::after {
   content: '';
   position: absolute;
@@ -340,10 +340,10 @@
 .casco:has([data-modulo-atual='hoje']) .contexto__bloco[data-modulo='hoje'],
 .casco:has([data-modulo-atual='agenda']) .contexto__bloco[data-modulo='agenda'],
 .casco:has([data-modulo-atual='clientes']) .contexto__bloco[data-modulo='clientes'],
-.casco:has([data-modulo-atual='atendimento']) .contexto__bloco[data-modulo='atendimento'],
+.casco:has([data-modulo-atual='barbearia']) .contexto__bloco[data-modulo='barbearia'],
+.casco:has([data-modulo-atual='lojas']) .contexto__bloco[data-modulo='lojas'],
 .casco:has([data-modulo-atual='financeiro']) .contexto__bloco[data-modulo='financeiro'],
 .casco:has([data-modulo-atual='crescimento']) .contexto__bloco[data-modulo='crescimento'],
-.casco:has([data-modulo-atual='gestao']) .contexto__bloco[data-modulo='gestao'],
 .casco:has([data-modulo-atual='configuracoes']) .contexto__bloco[data-modulo='configuracoes'] { display: block; }
 .contexto__faixa {
   display: flex;
@@ -597,7 +597,7 @@
    dois menus antes de chegar ao conteúdo. */
 @media (min-width: 1024px) {
   .casco {
-    grid-template-columns: 13rem minmax(0, 1fr);
+    grid-template-columns: 14rem minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
     height: 100dvh;
     overflow: hidden;
@@ -646,10 +646,10 @@
   .casco:has([data-modulo-atual='hoje']) .trilho__botao[data-modulo='hoje']::after,
   .casco:has([data-modulo-atual='agenda']) .trilho__botao[data-modulo='agenda']::after,
   .casco:has([data-modulo-atual='clientes']) .trilho__botao[data-modulo='clientes']::after,
-  .casco:has([data-modulo-atual='atendimento']) .trilho__botao[data-modulo='atendimento']::after,
+  .casco:has([data-modulo-atual='barbearia']) .trilho__botao[data-modulo='barbearia']::after,
+  .casco:has([data-modulo-atual='lojas']) .trilho__botao[data-modulo='lojas']::after,
   .casco:has([data-modulo-atual='financeiro']) .trilho__botao[data-modulo='financeiro']::after,
   .casco:has([data-modulo-atual='crescimento']) .trilho__botao[data-modulo='crescimento']::after,
-  .casco:has([data-modulo-atual='gestao']) .trilho__botao[data-modulo='gestao']::after,
   .casco:has([data-modulo-atual='configuracoes']) .trilho__botao[data-modulo='configuracoes']::after {
     left: calc(var(--space-2) * -1);
     right: auto;

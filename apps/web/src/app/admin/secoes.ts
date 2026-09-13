@@ -24,10 +24,11 @@ export type Modulo =
   | 'hoje'
   | 'agenda'
   | 'clientes'
-  | 'atendimento'
+
   | 'financeiro'
   | 'crescimento'
-  | 'gestao'
+  | 'barbearia'
+  | 'lojas'
   | 'configuracoes';
 
 export interface Destino {
@@ -83,7 +84,9 @@ export const MODULOS = [
     id: 'hoje',
     nome: 'Hoje',
     telas: [
-      { href: '/admin/dia', nome: 'Hoje', secao: 'dia', molde: 'operacional', nota: 'quem chega hoje, quem está atrasado, quem faltou', permissao: ['appointments.view'] },
+      { href: '/admin/dia', nome: 'Hoje', secao: 'dia', molde: 'operacional', nota: 'quem chega hoje, quem está atrasado, quem faltou', grupo: 'Agora', permissao: ['appointments.view'] },
+      { href: '/admin/painel', nome: 'Painel', secao: 'painel', molde: 'gestao', nota: 'faturamento, ocupação e os números do mês', grupo: 'O mês', permissao: ['reports.operational'] },
+      { href: '/admin/assistente', nome: 'Assistente de gestão', secao: 'assistente', molde: 'gestao', nota: 'pergunte em português', grupo: 'O mês', posicao: 'utilitario' },
     ],
     // A tela privada do barbeiro pertence ao mesmo momento operacional.
     dentro: [{ secao: 'meu-dia', molde: 'operacional', nome: 'Meu dia', nota: 'sua agenda e seus atendimentos', pai: 'dia', permissao: ['appointments.view'] }],
@@ -93,6 +96,7 @@ export const MODULOS = [
     nome: 'Agenda',
     telas: [
       { href: '/admin/agenda', nome: 'Agenda', secao: 'agenda', molde: 'operacional', nota: 'marcar, remarcar e bloquear horário', permissao: ['appointments.view'] },
+      { href: '/admin/fila', nome: 'Fila', secao: 'fila', molde: 'operacional', nota: 'clientes que chegaram sem marcar', recurso: 'fila', permissao: ['appointments.view'] },
     ],
     dentro: [],
   },
@@ -100,32 +104,25 @@ export const MODULOS = [
     id: 'clientes',
     nome: 'Clientes',
     telas: [
-      { href: '/admin/clientes', nome: 'Clientes', secao: 'clientes', molde: 'cadastro', nota: 'buscar, reconhecer e agir sobre a base', permissao: ['customers.view'] },
+      { href: '/admin/clientes', nome: 'Clientes', secao: 'clientes', molde: 'cadastro', nota: 'buscar, reconhecer e agir sobre a base', grupo: 'A base', permissao: ['customers.view'] },
+      { href: '/admin/recados', nome: 'Recados', secao: 'recados', molde: 'gestao', nota: 'recado escrito pelo cliente, sem nota', grupo: 'O que o cliente disse', permissao: ['feedback.view'] },
+      { href: '/admin/recepcao', nome: 'Perguntas sem resposta', secao: 'recepcao', molde: 'operacional', nota: 'perguntas que o site não soube responder', grupo: 'O que o cliente disse', permissao: ['feedback.view'] },
+      { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', molde: 'gestao', nota: 'a nota que o cliente deu, e a nota baixa a tratar', grupo: 'O que o cliente disse', permissao: ['reviews.view'] },
     ],
     // A ficha pertence à mesma área, embora continue sendo aberta por id.
     dentro: [{ secao: 'cliente', molde: 'cadastro', nome: 'Ficha do cliente', nota: 'histórico, preferências e relacionamento', pai: 'clientes', permissao: ['customers.view'] }],
   },
   {
-    id: 'atendimento',
-    nome: 'Atendimento',
-    telas: [
-      { href: '/admin/fila', nome: 'Fila', secao: 'fila', molde: 'operacional', nota: 'clientes que chegaram sem marcar', grupo: 'Agora', recurso: 'fila', permissao: ['appointments.view'] },
-      { href: '/admin/comanda', nome: 'Comanda', secao: 'comanda', molde: 'operacional', nota: 'receber o cliente: serviços, produtos e pagamento', grupo: 'Agora', permissao: ['cashier.open'] },
-      { href: '/admin/recados', nome: 'Recados', secao: 'recados', molde: 'gestao', nota: 'recado escrito pelo cliente, sem nota', grupo: 'Voz do cliente', permissao: ['feedback.view'] },
-      { href: '/admin/recepcao', nome: 'Perguntas sem resposta', secao: 'recepcao', molde: 'operacional', nota: 'perguntas que o site não soube responder', grupo: 'Voz do cliente', permissao: ['feedback.view'] },
-      { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', molde: 'gestao', nota: 'a nota que o cliente deu, e a nota baixa a tratar', grupo: 'Voz do cliente', permissao: ['reviews.view'] },
-    ],
-    dentro: [],
-  },
-  {
     id: 'financeiro',
     nome: 'Financeiro',
     telas: [
+      { href: '/admin/comanda', nome: 'Comanda', secao: 'comanda', molde: 'operacional', nota: 'receber o cliente: serviços, produtos e pagamento', grupo: 'Balcão', permissao: ['cashier.open'] },
       { href: '/admin/caixa', nome: 'Caixa', secao: 'caixa', molde: 'operacional', nota: 'abertura, sangria e fechamento da gaveta', grupo: 'Balcão', permissao: ['cashier.open'] },
       { href: '/admin/fiado', nome: 'Fiado', secao: 'fiado', molde: 'operacional', nota: 'o que os clientes levaram e ainda não pagaram', grupo: 'Balcão', permissao: ['cashier.open'] },
       { href: '/admin/financeiro', nome: 'Contas', secao: 'financeiro', molde: 'gestao', nota: 'contas da casa a pagar e a receber', grupo: 'Fechamento', permissao: ['finance.view'] },
       { href: '/admin/comissao', nome: 'Comissões', secao: 'comissao', molde: 'gestao', nota: 'o que cada barbeiro tem a receber no mês', grupo: 'Fechamento', permissao: ['commission.view_own', 'commission.view_all'] },
       { href: '/admin/dre', nome: 'Resultado', secao: 'dre', molde: 'gestao', nota: 'lucro: a receita menos custo e despesa', grupo: 'Fechamento', permissao: ['finance.view_profit'] },
+      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', molde: 'configuracao', nota: 'CNPJ, regime e notas emitidas', grupo: 'Fechamento', recurso: 'fiscal', permissao: ['fiscal.settings', 'finance.view'] },
     ],
     dentro: [{ secao: 'meus-numeros', molde: 'gestao', nome: 'Meus números', nota: 'seu resultado e suas comissões', pai: 'comissao', permissao: ['commission.view_own'] }],
   },
@@ -144,22 +141,25 @@ export const MODULOS = [
     dentro: [],
   },
   {
-    id: 'gestao',
-    nome: 'Gestão',
+    id: 'barbearia',
+    nome: 'Minha barbearia',
     telas: [
-      // A primeira tela é deliberadamente o painel: esta é a casa do dono.
-      { href: '/admin/painel', nome: 'Painel', secao: 'painel', molde: 'gestao', nota: 'faturamento, ocupação e os números do mês', grupo: 'Visão do negócio', permissao: ['reports.operational'] },
-      { href: '/admin/assistente', nome: 'Assistente de gestão', secao: 'assistente', molde: 'gestao', nota: 'pergunte em português', grupo: 'Visão do negócio', posicao: 'utilitario' },
-      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', molde: 'cadastro', nota: 'preço, duração e regras do serviço', grupo: 'Oferta', permissao: ['settings.manage'] },
-      { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', molde: 'cadastro', nota: 'cobrar menos na hora vazia e mais na cheia', grupo: 'Oferta', permissao: ['settings.manage'] },
-      { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', molde: 'cadastro', nota: 'combos pagos adiantado, como 5 cortes', grupo: 'Oferta', permissao: ['appointments.view'] },
-      { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', molde: 'cadastro', nota: 'barbeiros, jornadas e metas', grupo: 'Operação', permissao: ['settings.manage'] },
-      { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', molde: 'cadastro', nota: 'cadeiras, lavatórios e salas', grupo: 'Operação', permissao: ['settings.manage'] },
-      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', molde: 'cadastro', nota: 'produtos, contagem e ficha de consumo', grupo: 'Operação', permissao: ['inventory.view'] },
-      { href: '/admin/fotos', nome: 'Fotos e marca', secao: 'fotos', molde: 'configuracao', nota: 'logo e imagens da página pública', grupo: 'Estrutura', permissao: ['settings.manage'] },
-      { href: '/admin/franquia', nome: 'Franquia', secao: 'franquia', molde: 'configuracao', nota: 'o cardápio padrão da rede e o que esta casa adotou', grupo: 'Estrutura', permissao: ['settings.manage'] },
-      { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', molde: 'configuracao', nota: 'lojas da rede, quem opera cada uma e estoque entre elas', grupo: 'Estrutura' },
-      { href: '/admin/fiscal', nome: 'Nota fiscal', secao: 'fiscal', molde: 'configuracao', nota: 'CNPJ, regime e notas emitidas', grupo: 'Estrutura', recurso: 'fiscal', permissao: ['fiscal.settings', 'finance.view'] },
+      { href: '/admin/catalogo', nome: 'Serviços', secao: 'servicos', molde: 'cadastro', nota: 'preço, duração e regras do serviço', grupo: 'O que a casa vende', permissao: ['settings.manage'] },
+      { href: '/admin/precos', nome: 'Preços por horário', secao: 'precos', molde: 'cadastro', nota: 'cobrar menos na hora vazia e mais na cheia', grupo: 'O que a casa vende', permissao: ['settings.manage'] },
+      { href: '/admin/pacotes', nome: 'Pacotes', secao: 'pacotes', molde: 'cadastro', nota: 'combos pagos adiantado, como 5 cortes', grupo: 'O que a casa vende', permissao: ['appointments.view'] },
+      { href: '/admin/profissionais', nome: 'Profissionais', secao: 'profissionais', molde: 'cadastro', nota: 'barbeiros, jornadas e metas', grupo: 'Quem atende, e com o quê', permissao: ['settings.manage'] },
+      { href: '/admin/recursos', nome: 'Recursos', secao: 'recursos', molde: 'cadastro', nota: 'cadeiras, lavatórios e salas', grupo: 'Quem atende, e com o quê', permissao: ['settings.manage'] },
+      { href: '/admin/estoque', nome: 'Estoque', secao: 'estoque', molde: 'cadastro', nota: 'produtos, contagem e ficha de consumo', grupo: 'Quem atende, e com o quê', permissao: ['inventory.view'] },
+    ],
+    dentro: [],
+  },
+  {
+    id: 'lojas',
+    nome: 'Marca e lojas',
+    telas: [
+      { href: '/admin/fotos', nome: 'Fotos e marca', secao: 'fotos', molde: 'configuracao', nota: 'logo e imagens da página pública', permissao: ['settings.manage'] },
+      { href: '/admin/franquia', nome: 'Franquia', secao: 'franquia', molde: 'configuracao', nota: 'o cardápio padrão da rede e o que esta casa adotou', permissao: ['settings.manage'] },
+      { href: '/admin/unidades', nome: 'Unidades', secao: 'unidades', molde: 'configuracao', nota: 'lojas da rede, quem opera cada uma e estoque entre elas' },
     ],
     dentro: [],
   },

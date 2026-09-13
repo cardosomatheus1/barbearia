@@ -32,18 +32,29 @@ for (const href of LEGADO) {
   exigir(hrefs.filter((x) => x === href).length === 1, `destino legado duplicado ou ausente: ${href}`);
 }
 
-for (const nome of ['Hoje', 'Agenda', 'Clientes', 'Atendimento', 'Financeiro', 'Crescimento', 'Gestão', 'Configurações']) {
+// O bloco 140 partiu duas áreas e fundiu uma terceira. "Atendimento" saiu porque
+// metade dela era caixa de entrada de reclamação, e o que restava — a fila e a
+// comanda — pertence a quem já tem área: a agenda e o dinheiro. "Gestão" saiu
+// porque doze telas sem parentesco não são uma área, são o que sobrou.
+for (const nome of ['Hoje', 'Agenda', 'Clientes', 'Financeiro', 'Crescimento', 'Minha barbearia', 'Marca e lojas', 'Configurações']) {
   exigir(secoes.includes(`nome: '${nome}'`), `área sem o vocabulário esperado: ${nome}`);
 }
-for (const antigo of ["nome: 'Visão geral'", "nome: 'Marketing'", "nome: 'Cadastros'", "nome: 'Integrações'", "nome: 'Administração'"]) {
+// `Visão geral`, `Marketing`, `Cadastros`, `Integrações` e `Administração` foram
+// as áreas até o V0, e saíram por um motivo escrito em
+// `docs/04-backlog-pos-revisao.md`: é como um arquiteto organiza funcionalidade,
+// não como a recepção pensa. A avaliação cega do bloco 139 propôs de volta
+// "Visão geral" e "Cadastros" — é o nome que ocorre a quem olha a lista de
+// fora, e esta linha é o que impede de refazer a decisão sem saber que ela
+// já foi tomada.
+for (const antigo of ["nome: 'Visão geral'", "nome: 'Marketing'", "nome: 'Cadastros'", "nome: 'Integrações'", "nome: 'Administração'", "nome: 'Atendimento'", "nome: 'Gestão'"]) {
   exigir(!secoes.includes(antigo), `vocabulário antigo ainda está como área: ${antigo}`);
 }
 
 const pares = [
-  ['/admin/comanda', "id: 'atendimento'"],
+  ['/admin/comanda', "id: 'financeiro'"],
   ['/admin/clube', "id: 'crescimento'"],
-  ['/admin/fiscal', "id: 'gestao'"],
-  ['/admin/unidades', "id: 'gestao'"],
+  ['/admin/fiscal', "id: 'financeiro'"],
+  ['/admin/unidades', "id: 'lojas'"],
   ['/admin/chaves', "id: 'configuracoes'"],
   ['/admin/webhooks', "id: 'configuracoes'"],
 ];
@@ -57,7 +68,7 @@ exigir(/href: '\/admin\/assistente'[\s\S]{0,180}posicao: 'utilitario'/.test(seco
 exigir(casco.includes('utilitariosVisiveis(modulos)'), 'casco não deriva o Assistente do registro');
 exigir(casco.includes('trilho__separador'), 'Configurações não tem separação visual mínima');
 
-for (const modulo of ['hoje', 'agenda', 'clientes', 'atendimento', 'financeiro', 'crescimento', 'gestao', 'configuracoes']) {
+for (const modulo of ['hoje', 'agenda', 'clientes', 'financeiro', 'crescimento', 'barbearia', 'lojas', 'configuracoes']) {
   exigir(css.includes(`data-modulo-atual='${modulo}'`), `CSS não reconhece o módulo ${modulo}`);
 }
 

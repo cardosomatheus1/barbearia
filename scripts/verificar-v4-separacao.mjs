@@ -8,7 +8,7 @@ const css = lerCssDoApp();
 const falhas = [];
 const exigir = (condicao, mensagem) => { if (!condicao) falhas.push(mensagem); };
 
-const PRINCIPAIS = ['hoje', 'agenda', 'clientes', 'atendimento', 'financeiro', 'crescimento', 'gestao'];
+const PRINCIPAIS = ['hoje', 'agenda', 'clientes', 'financeiro', 'crescimento', 'barbearia', 'lojas'];
 const CONFIG = [
   '/admin/equipe', '/admin/seguranca', '/admin/chaves', '/admin/webhooks',
   '/admin/lgpd', '/admin/trilha', '/admin/importar', '/admin/plano', '/admin/configuracoes',

@@ -17,9 +17,19 @@ const exigir = (condicao, mensagem) => { if (!condicao) falhas.push(mensagem); }
 
 // A porta existe e é uma área de primeira ordem. A ficha pertence a ela, não a Atendimento.
 exigir(/id: 'clientes'[\s\S]{0,260}href: '\/admin\/clientes'/.test(secoes), 'Clientes não é área de primeira ordem');
-exigir(/id: 'clientes'[\s\S]{0,520}dentro: \[\{ secao: 'cliente'/.test(secoes), 'ficha do cliente não pertence à área Clientes');
-const atendimento = secoes.match(/id: 'atendimento'[\s\S]*?\n  \},\n  \{\n    id: 'financeiro'/)?.[0] ?? '';
-exigir(!atendimento.includes("'cliente'"), 'ficha do cliente ainda está ancorada em Atendimento');
+// A conferência é o **bloco do módulo**, não uma janela de caracteres: a versão
+// anterior dava 520 caracteres de folga entre `id: 'clientes'` e o `dentro`, e o
+// bloco 140 — que levou os três destinos de voz do cliente para esta área —
+// empurrou a ficha para fora da janela sem mover a ficha de área nenhuma.
+// Guarda ancorada em distância de texto reprova o legítimo assim que o registro
+// cresce, e o registro cresce.
+const bloco = (id) => secoes.match(new RegExp(`id: '${id}'[\\s\\S]*?\\n  \\},`))?.[0] ?? '';
+exigir(/dentro: \[\{ secao: 'cliente'/.test(bloco('clientes')), 'ficha do cliente não pertence à área Clientes');
+// E ela é de **uma** área só: ancorada em duas, a migalha escolheria pela ordem
+// do registro. O `id: 'atendimento'` que esta linha citava deixou de existir, e
+// citar um módulo que não existe faz a guarda passar por vacuidade.
+const ancoras = [...secoes.matchAll(/secao: 'cliente'[,}]/g)].length;
+exigir(ancoras === 1, `ficha do cliente ancorada em ${ancoras} lugares, e precisa ser um`);
 exigir(secoes.includes("permissao: ['customers.view']"), 'porta Clientes não declara customers.view no menu');
 exigir(casco.includes("clientes: traco("), 'Clientes não tem identidade no trilho');
 exigir((secoes.match(/href: '\/admin\/clientes'/g) ?? []).length === 1, 'porta Clientes duplicada ou ausente no registro');
