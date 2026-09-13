@@ -3229,7 +3229,6 @@ async function main() {
     { nome: 'comissão', url: '/admin/comissao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'resultado', url: '/admin/dre', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'regras de comissão', url: '/admin/comissao/regras', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
-    { nome: 'avisos', url: '/admin/avisos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recados', url: '/admin/recados', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'recepção', url: '/admin/recepcao', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'avaliações', url: '/admin/avaliacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
@@ -3252,7 +3251,17 @@ async function main() {
     { nome: 'preços por horário', url: '/admin/precos', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'nota fiscal', url: '/admin/fiscal', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'whatsapp', url: '/admin/whatsapp', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
-    { nome: 'automações', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    /*
+      "Avisos ao cliente" saiu desta lista no bloco 145: ele virou a metade *Do
+      horário marcado* desta tela, e o endereço antigo agora redireciona — a
+      medição reprovou com "desviou para /admin/automacoes", que é exatamente o
+      que ela existe para dizer.
+
+      O recurso `avisos` continua sendo ligado na semente, e agora por um motivo
+      a mais: sem ele a metade nova não desenha, e a tela seria fotografada no
+      estado anterior à mudança — medição verde sobre a tela que ninguém olhou.
+    */
+    { nome: 'mensagens automáticas', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'campanhas', url: '/admin/campanhas', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'unidades', url: '/admin/unidades', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'chaves de API', url: '/admin/chaves', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

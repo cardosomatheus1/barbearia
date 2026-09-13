@@ -505,8 +505,8 @@ export default async function OnboardingPage({ searchParams }: Props) {
               <a className="ui-button ui-button--secondary" href="/admin/configuracoes">
                 Ajustar cancelamento
               </a>
-              <a className="ui-button ui-button--secondary" href="/admin/avisos">
-                Avisos ao cliente
+              <a className="ui-button ui-button--secondary" href="/admin/automacoes#do-horario">
+                Mensagens automáticas
               </a>
             </div>
           ) : (

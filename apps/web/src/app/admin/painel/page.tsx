@@ -319,7 +319,7 @@ export default async function PainelPage({ searchParams }: Props) {
       selo: 'Atenção',
       titulo: `Faltas ${referenciaDoPeriodo}: ${operacao.dados.noShow.valor}%`,
       texto: 'Revise confirmações e lembretes dos próximos horários para proteger a ocupação.',
-      href: '/admin/avisos',
+      href: '/admin/automacoes#do-horario',
       acao: 'Ver lembretes',
       tom: 'aviso',
     });

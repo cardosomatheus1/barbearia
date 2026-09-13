@@ -250,6 +250,18 @@ else
   failures+=("agenda proporcional V10")
 fi
 
+# A medição de navegador roda no segundo job do CI e custa catorze minutos para
+# dizer que a lista de telas dela ficou para trás de `secoes.ts`. Esta guarda faz
+# a mesma pergunta em três segundos, sem navegador.
+printf '\n\033[1m==> telas medidas\033[0m\n'
+if node scripts/verificar-telas-medidas.mjs >"$SAIDA/telas-medidas.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/telas-medidas.log" | tail -25
+  failures+=("telas medidas")
+fi
+
 # V11 é a válvula de escape da arquitetura de navegação: função vem do
 # registro já recortado; pessoa e horário vêm das rotas que já aplicam tenant
 # e permissão. Ações no contexto impedem procurar o mesmo objeto uma segunda vez.
