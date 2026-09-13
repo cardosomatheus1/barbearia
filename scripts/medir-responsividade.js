@@ -3262,6 +3262,8 @@ async function main() {
       estado anterior à mudança — medição verde sobre a tela que ninguém olhou.
     */
     { nome: 'mensagens automáticas', url: '/admin/automacoes', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'mensagens para enviar', url: '/admin/whatsapp/manual', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
+    { nome: 'tudo o que existe aqui', url: '/admin/tudo', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'campanhas', url: '/admin/campanhas', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'unidades', url: '/admin/unidades', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },
     { nome: 'chaves de API', url: '/admin/chaves', cookie: { nome: 'gestor', valor: token, caminho: '/admin' } },

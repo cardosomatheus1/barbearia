@@ -240,7 +240,8 @@
   white-space: nowrap;
 }
 .contexto__atalho:hover { color: var(--color-text-primary); border-color: var(--color-border-strong); }
-.casco:has([data-secao='assistente']) .contexto__atalho[data-para='assistente'] {
+.casco:has([data-secao='assistente']) .contexto__atalho[data-para='assistente'],
+.casco:has([data-secao='tudo']) .contexto__atalho[data-para='tudo'] {
   color: var(--color-accent);
   border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
   background: color-mix(in srgb, var(--color-accent) 8%, transparent);
@@ -270,6 +271,8 @@
 .casco:has([data-secao='dre']) .contexto__orientacao[data-para='dre'],
 .casco:has([data-secao='meus-numeros']) .contexto__orientacao[data-para='meus-numeros'],
 .casco:has([data-secao='whatsapp']) .contexto__orientacao[data-para='whatsapp'],
+.casco:has([data-secao='whatsapp-manual']) .contexto__orientacao[data-para='whatsapp-manual'],
+.casco:has([data-secao='tudo']) .contexto__orientacao[data-para='tudo'],
 .casco:has([data-secao='campanhas']) .contexto__orientacao[data-para='campanhas'],
 .casco:has([data-secao='automacoes']) .contexto__orientacao[data-para='automacoes'],
 .casco:has([data-secao='avisos']) .contexto__orientacao[data-para='avisos'],
@@ -408,6 +411,7 @@
 .casco:has([data-secao='comissao']) .contexto__link[data-para='comissao'],
 .casco:has([data-secao='dre']) .contexto__link[data-para='dre'],
 .casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp'],
+.casco:has([data-secao='whatsapp-manual']) .contexto__link[data-para='whatsapp-manual'],
 .casco:has([data-secao='campanhas']) .contexto__link[data-para='campanhas'],
 .casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes'],
 .casco:has([data-secao='avisos']) .contexto__link[data-para='avisos'],
@@ -451,6 +455,7 @@
 .casco:has([data-secao='comissao']) .contexto__link[data-para='comissao']::after,
 .casco:has([data-secao='dre']) .contexto__link[data-para='dre']::after,
 .casco:has([data-secao='whatsapp']) .contexto__link[data-para='whatsapp']::after,
+.casco:has([data-secao='whatsapp-manual']) .contexto__link[data-para='whatsapp-manual']::after,
 .casco:has([data-secao='campanhas']) .contexto__link[data-para='campanhas']::after,
 .casco:has([data-secao='automacoes']) .contexto__link[data-para='automacoes']::after,
 .casco:has([data-secao='avisos']) .contexto__link[data-para='avisos']::after,

@@ -22,10 +22,14 @@ const exigir = (condicao, mensagem) => { if (!condicao) falhas.push(mensagem); }
 
 // V7 — cada seção declara um contrato visual na mesma fonte da navegação.
 const declaracoes = [...secoes.matchAll(/secao: '([^']+)',\s*molde: '([^']+)'/g)];
+// 46 desde o bloco 146: a fila de envio à mão virou destino registrado e
+// `tudo` — o mapa do painel — entrou como utilitário transversal. Ela
+// existia desde o 96 e emprestava a seção de WhatsApp — o que a deixava fora do
+// menu, fora da busca e com a migalha apontando para uma tela de configuração.
 // 44 desde o bloco 145: `avisos` deixou de ser seção própria e virou a metade
 // *Do horário marcado* de Mensagens automáticas. A contagem é escrita de
 // propósito — tela nova entra com molde declarado ou o número não bate.
-exigir(declaracoes.length === 44, `V7 esperava 44 seções com molde; encontrou ${declaracoes.length}`);
+exigir(declaracoes.length === 46, `V7 esperava 46 seções com molde; encontrou ${declaracoes.length}`);
 const permitidos = new Set(['operacional', 'cadastro', 'gestao', 'configuracao', 'excecao']);
 for (const [, secao, molde] of declaracoes) {
   exigir(permitidos.has(molde), `V7: ${secao} usa molde desconhecido ${molde}`);

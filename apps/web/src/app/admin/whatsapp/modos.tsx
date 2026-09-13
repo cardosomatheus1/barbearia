@@ -53,7 +53,7 @@ export function ContextoDeEnvio({ canal }: { canal: 'meta' | 'baileys' | null })
         : 'Sem conexão, só saem as mensagens que você mandar à mão, pela fila.'}
       {' '}Cada mensagem abaixo diz para onde ela vai.
     </p>
-    <p><a href="/admin/whatsapp">Configurar WhatsApp</a> · <a href="/admin/whatsapp/manual">Ver a fila de envio manual</a></p>
+    <p><a href="/admin/whatsapp">Configurar WhatsApp</a> · <a href="/admin/whatsapp/manual">Mensagens para enviar</a></p>
   </div>;
 }
 
@@ -101,7 +101,7 @@ export function ResumoDasMensagens({ meta, baileys, manuais, ativo }: {
       </a>
       <a className={styles.modo} href="/admin/whatsapp/manual">
         <span className={styles.etiqueta}>{quantas(manuais)}</span>
-        <strong>Para mandar à mão</strong>
+        <strong>Mensagens para enviar</strong>
         <span>
           Você escreve o texto, sem aprovação. Nunca saem sozinhas: viram uma fila com a conversa
           pronta, e valem com qualquer conexão — inclusive sem nenhuma.

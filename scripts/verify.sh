@@ -250,6 +250,17 @@ else
   failures+=("agenda proporcional V10")
 fi
 
+# O mapa do painel precisa continuar derivado e recortado por permissão: um mapa
+# que oferece porta que recusa ensina a não confiar no mapa.
+printf '\n\033[1m==> índice do painel\033[0m\n'
+if node scripts/verificar-indice-do-painel.mjs >"$SAIDA/indice.log" 2>&1; then
+  printf '\033[32m    ok\033[0m\n'
+else
+  printf '\033[31m    FALHOU\033[0m\n'
+  sed 's/^/    /' "$SAIDA/indice.log" | tail -25
+  failures+=("índice do painel")
+fi
+
 # A medição de navegador roda no segundo job do CI e custa catorze minutos para
 # dizer que a lista de telas dela ficou para trás de `secoes.ts`. Esta guarda faz
 # a mesma pergunta em três segundos, sem navegador.

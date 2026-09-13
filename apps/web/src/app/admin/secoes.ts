@@ -104,6 +104,13 @@ export const MODULOS = [
     telas: [
       { href: '/admin/dia', nome: 'Hoje', secao: 'dia', molde: 'operacional', nota: 'quem chega hoje, quem está atrasado, quem faltou', permissao: ['appointments.view'] },
       { href: '/admin/assistente', nome: 'Assistente de gestão', secao: 'assistente', molde: 'gestao', nota: 'pergunte em português', posicao: 'utilitario' },
+      /*
+        O mapa é transversal como o Assistente, e pelo mesmo motivo: ele não
+        compete com uma área de trabalho, atende a todas. Sem permissão de
+        propósito — ele só lista o que a própria pessoa já consegue abrir, então
+        exigir algo seria trancar o mapa para quem mais precisa dele.
+      */
+      { href: '/admin/tudo', nome: 'Todas as telas', secao: 'tudo', molde: 'gestao', nota: 'o mapa do painel: todas as telas que o seu acesso abre', busca: 'tudo mapa indice telas menu onde fica ajuda perdido', posicao: 'utilitario' },
     ],
     // A tela privada do barbeiro pertence ao mesmo momento operacional.
     dentro: [{ secao: 'meu-dia', molde: 'operacional', nome: 'Meu dia', nota: 'sua agenda e seus atendimentos', pai: 'dia', permissao: ['appointments.view'] }],
@@ -149,6 +156,20 @@ export const MODULOS = [
     nome: 'Crescimento',
     telas: [
       { href: '/admin/whatsapp', nome: 'WhatsApp', secao: 'whatsapp', molde: 'configuracao', nota: 'conexões e formas de enviar mensagens', grupo: 'Relacionamento', permissao: ['whatsapp.manage'] },
+      /*
+        A fila de envio à mão existe desde o bloco 96 e **nunca esteve neste
+        registro**: só se chegava a ela por um cartão dentro de WhatsApp, que é
+        tela de configuração. Uma lista de trabalho diário escondida atrás de
+        uma tela de setup é a §6 pergunta 1, e ela não aparecia na busca global
+        — `destinosDaBusca` deriva daqui, então digitar "mandar à mão" não
+        achava nada.
+
+        `marketing.send` sozinha, e não as duas que a tela exige: `permissao`
+        casa por `some()`, então declarar as duas a mostraria a quem tem só
+        `customers.view` — que é quase todo mundo. Quem tem `marketing.send` e
+        não tem a outra lê a frase que a própria tela escreve.
+      */
+      { href: '/admin/whatsapp/manual', nome: 'Mensagens para enviar', secao: 'whatsapp-manual', molde: 'operacional', nota: 'a fila do que sai pelo seu celular, com a conversa pronta', grupo: 'Relacionamento', busca: 'fila manual mandar a mao enviar celular pendente conversa disparo', permissao: ['marketing.send'] },
       { href: '/admin/campanhas', nome: 'Campanhas', secao: 'campanhas', molde: 'gestao', nota: 'escolher um público e mandar promoção', grupo: 'Relacionamento', busca: 'promocao disparo publico sumido inativo reativar', permissao: ['marketing.send'] },
       { href: '/admin/automacoes', nome: 'Mensagens automáticas', secao: 'automacoes', molde: 'configuracao', nota: 'o que a casa manda sozinha: lembrete do horário, aniversário, sumiço', grupo: 'Relacionamento', busca: 'aviso lembrete confirmacao retorno automacao gatilho aniversario sumico pos-atendimento', permissao: ['marketing.send', 'settings.manage'] },
       { href: '/admin/retencao', nome: 'Retenção', secao: 'retencao', molde: 'gestao', nota: 'quem está sumindo, e por quê (só a leitura)', grupo: 'Retorno', busca: 'churn risco sumido inativo perdido', permissao: ['customers.view', 'customers.view_notes', 'reviews.view'] },
@@ -414,3 +435,73 @@ const PORTA_ABERTA: Record<string, readonly string[]> = Object.fromEntries(
 );
 
 export const SECOES_POR_MODULO = PORTA_ABERTA as Readonly<Record<Modulo, readonly string[]>>;
+
+/**
+ * O ritmo com que uma tela é usada — e a resposta para "por onde eu começo?".
+ *
+ * O painel tem 41 destinos e o menu os apresenta todos com o mesmo peso: o
+ * Caixa, que a recepção abre toda manhã, ao lado de Webhooks, que alguém toca
+ * uma vez na vida. Quem chega pela primeira vez não tem como saber que **oito**
+ * telas dão conta do dia inteiro — e foi exatamente isso que aconteceu numa
+ * demonstração para cliente.
+ *
+ * O dado para responder já existia: `molde` diz de que tipo é cada tela desde o
+ * V7, e era usado só para decidir aparência. Aqui ele vira navegação.
+ *
+ * `Record` total sobre a união, nunca um mapa parcial com `??`: um molde novo
+ * precisa que alguém **decida** o ritmo dele, e o compilador é quem cobra. Com
+ * o padrão por omissão, a tela nova cairia calada no balde de configuração.
+ */
+export type RitmoDeUso = 'todo-dia' | 'para-decidir' | 'deixar-pronto';
+
+const RITMO_DO_MOLDE: Record<MoldeDePagina, RitmoDeUso> = {
+  operacional: 'todo-dia',
+  gestao: 'para-decidir',
+  cadastro: 'deixar-pronto',
+  configuracao: 'deixar-pronto',
+  // Molde de exceção já é uma tela que não segue padrão; o ritmo dela também não
+  // se adivinha, e "deixar pronto" é o balde que não promete uso diário.
+  excecao: 'deixar-pronto',
+};
+
+export interface RitmoDoPainel {
+  readonly id: RitmoDeUso;
+  readonly nome: string;
+  readonly quando: string;
+}
+
+/** A ordem é a do dia de trabalho: o que se abre agora vem antes do que se ajusta. */
+export const RITMOS: readonly RitmoDoPainel[] = [
+  { id: 'todo-dia', nome: 'Todo dia', quando: 'Com a barbearia aberta, é daqui que o balcão trabalha.' },
+  { id: 'para-decidir', nome: 'Para decidir', quando: 'Você olha de tempos em tempos, para saber como o negócio vai.' },
+  { id: 'deixar-pronto', nome: 'Para deixar pronto', quando: 'Você ajusta uma vez e volta só quando algo muda.' },
+];
+
+export interface PortaDoIndice {
+  readonly href: string;
+  readonly nome: string;
+  readonly nota: string;
+  readonly onde: string;
+  readonly secao: string;
+  readonly ritmo: RitmoDeUso;
+}
+
+/**
+ * Todo destino que esta pessoa consegue abrir, agrupado por ritmo.
+ *
+ * Derivado de `orientacoesVisiveis`, que é a mesma fonte da migalha e da busca:
+ * uma segunda travessia do registro seria a lista paralela que este arquivo
+ * existe para não ter. Telas sem endereço próprio — a ficha do cliente, que
+ * abre por id — ficam de fora: um índice não pode oferecer porta que não existe.
+ */
+export function indicePorRitmo(
+  modulos: readonly ModuloDoPainel[],
+): readonly (RitmoDoPainel & { readonly portas: readonly PortaDoIndice[] })[] {
+  const portas = orientacoesVisiveis(modulos).flatMap((tela): PortaDoIndice[] =>
+    tela.href === undefined
+      ? []
+      : [{ href: tela.href, nome: tela.nome, nota: tela.nota, onde: tela.moduloNome, secao: tela.secao, ritmo: RITMO_DO_MOLDE[tela.molde] }],
+  );
+  return RITMOS.map((ritmo) => ({ ...ritmo, portas: portas.filter((porta) => porta.ritmo === ritmo.id) }))
+    .filter((ritmo) => ritmo.portas.length > 0);
+}
