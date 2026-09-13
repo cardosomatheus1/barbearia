@@ -215,6 +215,39 @@ describe('o CSS acompanha o casco', () => {
     expect(semRegra.filter((s) => listadas.has(s))).toEqual([]);
   });
 
+  it('o nome do módulo continua visível na tela larga', () => {
+    /**
+     * O trilho perdia os oito nomes do notebook para cima.
+     *
+     * `.trilho__legenda` era escondida dentro da media query de 1024px por
+     * `position: absolute; width: 1px; clip-path: inset(50%)` — a forma que
+     * deixa o texto só para o leitor de tela. Medido no navegador antes do
+     * conserto: a 1280px o trilho tinha 83px de largura e os oito rótulos
+     * estavam cortados a zero; a 960px, onde o trilho quebra em linhas, todos
+     * apareciam.
+     *
+     * O produto ficava com a tela grande **perdendo** informação que a pequena
+     * tem, o contrário da regra do projeto: a mesma tela começa no piso e ganha
+     * densidade quando há espaço. E o que sobrava era o `title`, que não existe
+     * no toque e leva um segundo parado com o mouse — o dono relatou o menu
+     * como confuso no PC e bom no celular, que é exatamente esta inversão.
+     *
+     * O corte foi medido antes de a guarda ser escrita. "Alguma declaração que
+     * tira o elemento da tela" acusa **44 blocos** do CSS do produto, quase
+     * todos legítimos — é a guarda que alguém desliga na primeira semana.
+     * Ancorada em `.trilho__legenda`, ela acusa exatamente a regra que este
+     * bloco apagou: 1 antes, 0 depois.
+     */
+    const escondem = /position:\s*absolute|clip-path|width:\s*1px|height:\s*1px|display:\s*none/;
+    const blocos = [...css.matchAll(/\.trilho__legenda\s*\{([^}]*)\}/g)].map((m) => m[1] ?? '');
+
+    expect(blocos.length, 'a regra de `.trilho__legenda` sumiu do CSS').toBeGreaterThan(0);
+    expect(
+      blocos.filter((corpo) => escondem.test(corpo)),
+      'o nome do módulo voltou a ser escondido — no notebook o trilho vira uma coluna de ícones mudos',
+    ).toEqual([]);
+  });
+
   it('cada módulo tem as regras que o acendem no trilho e revelam o contexto', () => {
     /**
      * O CSS **precisa** enumerar módulo, e é a mesma limitação de seletor da

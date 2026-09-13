@@ -3,7 +3,7 @@
 Companheiro do [`SPEC.md`](SPEC.md). A SPEC diz **o que** o produto é; este
 documento diz **em quantas partes** ele é construído e em que ordem.
 
-**Prontidão do produto:** use a matriz abaixo. Os 137 blocos continuam registrados
+**Prontidão do produto:** use a matriz abaixo. Os 138 blocos continuam registrados
 como histórico de execução; bloco concluído não é sinônimo de integração real nem
 de funcionalidade pronta para produção.
 
@@ -542,6 +542,7 @@ estavam no código, e a maioria é a corrida do WhatsApp oficial contra a Meta.
 | 135 | A hora que o servidor renderiza e o navegador não reidrata. Oito telas formatavam `hour`/`minute` sem `timeZone`: `Intl` usa UTC de um lado e o fuso do aparelho do outro, o React não reidrata e a **página inteira** cai com o erro 418 — não é a hora errada num canto, é a tela em branco. O fuso passa a vir da unidade nas sete telas da barbearia e de `FUSO_DA_PLATAFORMA` na trilha da plataforma, que atravessa barbearias. Com a guarda derivada, e o corte medido **antes** de escrevê-la: "toda formatação sem `timeZone`" acusava 42 de 63 e seria desligada na primeira semana; "pede hora e não diz o fuso" acusa 8, e as 8 eram defeito | ✅ |
 | 136 | A página de Termos de Serviço, que a Meta exige em URL pública ao lado da privacidade — o campo estava com o exemplo `https://www.facebook.com/`, que reprova a submissão antes de qualquer humano olhar. Ela identifica a parte contratante pelo CNPJ, escreve a régua de cobrança com os números de `packages/core/src/cobranca.ts` e declara em letras os três `❌` da matriz. E entra na varredura R8: é o único texto do produto capaz de virar obrigação jurídica | ✅ |
 | 137 | Os três transportes de mensagem saem do esconderijo. `manual` caía no ramo da Meta e exigia `status = 'aprovado'` — um estado que a Meta nunca concede a um texto que ela nunca vê —, e a consulta da tela ainda o excluía por `WHERE`. Somado ao corte por conexão ativa, quem estava na Meta não enxergava os textos do Baileys nem os manuais: três mundos isolados, cada um invisível de dentro dos outros, com a fila de envio à mão pronta e inalcançável de Campanhas. Transporte passa a ser do **texto** e conexão da **unidade**, as duas perguntas separadas na tela, e o destino escrito em cada opção — onde a escolha acontece. Junto, a atribuição de receita passa a exigir `wamid`: uma campanha com zero mensagens entregues mostrava R$ 1.991,00 de receita em produção, creditando quem voltou sozinho | ✅ |
+| 138 | O trilho do painel recupera os nomes na tela larga. Do notebook para cima `.trilho__legenda` era escondida por `clip-path: inset(50%)` — a forma que deixa o texto só para o leitor de tela —, e o que sobrava eram oito ícones mudos com um `title` que não existe no toque e leva um segundo parado com o mouse. Medido no navegador: a 1280px o trilho tinha **83px de largura e os oito rótulos cortados a zero**; a 960px, onde ele quebra em linhas, todos apareciam. O produto ficava com a tela grande **perdendo** informação que a pequena tem, o contrário da regra do projeto — a mesma tela começa no piso e ganha densidade quando há espaço. A coluna passa a 13rem, com o ícone à esquerda do nome: a composição do celular virada de lado, e não um segundo desenho | ✅ |
 
 ---
 
