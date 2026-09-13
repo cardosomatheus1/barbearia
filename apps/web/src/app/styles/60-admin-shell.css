@@ -183,7 +183,18 @@
 
 .contexto {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /*
+    `auto` dimensiona pelo max-content: a faixa de ações cresce com o nome de
+    quem está logado e com quantos atalhos existem, e empurra a página inteira.
+    O bloco 146 acrescentou o segundo atalho e reprovou **todas** as telas do
+    admin em 360 e 390 — nenhuma delas tocada. Medido em `/admin/onboarding` a
+    360px: body 384, o botão de busca em left −14 e o nome do usuário cortado
+    em largura 0, fora da borda.
+
+    `minmax(0, auto)` devolve o piso a zero e o `flex-wrap` abaixo é o par
+    obrigatório: sem ele a faixa continua numa linha só e só muda quem estoura.
+  */
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   grid-template-areas:
     "casa acoes"
     "orientacao orientacao"
@@ -220,6 +231,8 @@
 .contexto__acoes {
   grid-area: acoes;
   display: flex;
+  /* Refluir, nunca esconder: no celular os atalhos descem de linha. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
