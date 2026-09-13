@@ -25,6 +25,7 @@ import {
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { ARecuperar, Contestar, dia, hora } from './componentes';
 
 /**
  * Avaliações e recuperação de nota baixa (bloco 43, SPEC §4.10).
@@ -48,7 +49,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Avaliações',
+  title: 'Notas e reputação',
   robots: { index: false, follow: false },
 };
 
@@ -80,164 +81,8 @@ const FALHA: Record<string, string> = {
  * tela em que a gerência tem 48h para ligar — ela procurava na agenda um
  * horário numa casa que já estava fechada.
  */
-const dia = (fuso: string, iso: string | null) =>
-  iso
-    ? new Intl.DateTimeFormat('pt-BR', {
-        timeZone: fuso,
-        day: '2-digit',
-        month: '2-digit',
-      }).format(new Date(iso))
-    : '—';
 
-const hora = (fuso: string, iso: string | null) => (iso ? localTime(fuso, iso) : '');
 
-/** O alerta da SPEC: "Cliente insatisfeito — Carlos, nota 2, atendimento de hoje 14:00". */
-function ARecuperar({
-  avaliacao,
-  podeContestar,
-  fuso,
-}: {
-  readonly avaliacao: AvaliacaoNaTela;
-  readonly podeContestar: boolean;
-  /** O fuso da unidade. Formatar no do processo é o defeito D2. */
-  readonly fuso: string;
-}) {
-  return (
-    <article className="avaliacao avaliacao--alerta">
-      <header className="avaliacao__topo">
-        <p className="avaliacao__estrelas" aria-label={`Nota ${avaliacao.nota} de 5`}>
-          {avaliacao.estrelas}
-        </p>
-        <p className="avaliacao__prazo tabular">
-          {PRAZO_PARA_TRATAR(avaliacao.horasRestantes)}
-        </p>
-      </header>
-
-      <p className="avaliacao__quem">
-        {avaliacao.clienteNome}
-        {avaliacao.servicoNome ? ` · ${avaliacao.servicoNome}` : ''}
-        {avaliacao.profissionalNome ? ` com ${avaliacao.profissionalNome}` : ''}
-      </p>
-      <p className="avaliacao__quando">
-        Atendimento de {dia(fuso, avaliacao.atendidoEm)} às {hora(fuso, avaliacao.atendidoEm)}
-      </p>
-
-      {avaliacao.comentario ? (
-        <blockquote className="avaliacao__texto">{avaliacao.comentario}</blockquote>
-      ) : (
-        <p className="avaliacao__texto avaliacao__texto--vazio">
-          Deu a nota e não escreveu nada. Vale mais uma ligação, não menos.
-        </p>
-      )}
-
-      <form action={acaoTratarAvaliacao} className="avaliacao__form">
-        <input name="id" type="hidden" value={avaliacao.id} />
-
-        <label className="ui-field">
-          <span className="ui-field__label">O que você fez</span>
-          <select className="ui-field__input" defaultValue="contato" name="desfecho">
-            {DESFECHOS_DA_RECUPERACAO.map((d) => (
-              <option key={d} value={d}>
-                {ROTULO_DO_DESFECHO[d]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="ui-field">
-          <span className="ui-field__label">Como foi</span>
-          <textarea
-            className="ui-field__input"
-            maxLength={1000}
-            minLength={10}
-            name="nota"
-            placeholder="Liguei, ele contou que esperou 40 minutos. Refiz o corte na quinta, sem cobrar."
-            required
-            rows={2}
-          />
-          <span className="ui-field__hint">
-            Daqui a seis meses, isto é o que responde “por que esse cliente voltou?”.
-          </span>
-        </label>
-
-        <button className="ui-button ui-button--primary" type="submit">
-          {VERBO_DA_RECUPERACAO}
-        </button>
-      </form>
-
-      {/*
-        A saída também mora aqui, e é de propósito: a nota 1 de quem nunca foi
-        atendido cai nesta fila como qualquer outra, e mandar o dono procurá-la
-        na lista de baixo seria a tela escondendo a resposta certa.
-      */}
-      {podeContestar ? <Contestar avaliacao={avaliacao} /> : null}
-    </article>
-  );
-}
-
-/**
- * O formulário de contestação, atrás de um `<details>` e nunca em destaque.
- *
- * A ação primária desta tela é registrar o que a casa fez — o botão âmbar do
- * cartão de alerta. Contestar é a saída para o caso raro, e um botão do mesmo
- * peso ao lado de toda nota ensinaria a equipe a alcançá-lo primeiro. É o mesmo
- * desenho da zona de perigo da ficha do cliente: destaque de **cor**, nunca de
- * tamanho.
- */
-function Contestar({ avaliacao }: { readonly avaliacao: AvaliacaoNaTela }) {
-  return (
-    <details className="anotar avaliacao__contestar">
-      <summary className="anotar__abrir avaliacao__contestar-abrir">Contestar esta avaliação</summary>
-
-      {/*
-        A frase que impede o mal-entendido, e é irmã da frase das 48 horas logo
-        acima. Sem ela, um botão chamado "contestar" parece o botão de apagar
-        que a SPEC §4.10 proíbe — e a equipe aprenderia a usá-lo assim.
-      */}
-      <p className="painel__nota">
-        Contestar <strong>suspende a avaliação do seu perfil público</strong> enquanto a casa
-        alega que ela é injusta. A nota e o texto continuam aqui, sem mudar, e{' '}
-        <strong>a sua média continua contando esta avaliação</strong> — só o cliente deixa de vê-la.
-        Não é apagar, e não existe apagar.
-      </p>
-
-      <form action={acaoContestarAvaliacao} className="avaliacao__form avaliacao__form--contestar">
-        <input name="id" type="hidden" value={avaliacao.id} />
-
-        <label className="ui-field">
-          <span className="ui-field__label">Por que ela é injusta</span>
-          <select className="ui-field__input" defaultValue="spam" name="motivo">
-            {MOTIVOS_DA_CONTESTACAO.map((m) => (
-              <option key={m} value={m}>
-                {ROTULO_DO_MOTIVO[m]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="ui-field">
-          <span className="ui-field__label">O que aconteceu</span>
-          <textarea
-            className="ui-field__input"
-            maxLength={1000}
-            minLength={10}
-            name="nota"
-            placeholder="Não temos atendimento no nome dela, e o texto é o mesmo que apareceu em outras três barbearias da rua."
-            required
-            rows={2}
-          />
-          <span className="ui-field__hint">
-            Fica na trilha, com o seu nome. É o que sustenta a suspensão se alguém perguntar.
-          </span>
-        </label>
-
-        <button className="ui-button ui-button--secondary" type="submit">
-          Contestar
-        </button>
-      </form>
-    </details>
-  );
-}
 
 function Avaliacao({
   avaliacao,
@@ -387,7 +232,7 @@ export default async function AvaliacoesPage({ searchParams }: Props) {
     <main className="ui-container painel__conteudo" {...secao('avaliacoes')}>
       {topo}
 
-      <h1 className="painel__titulo">Avaliações</h1>
+      <h1 className="painel__titulo">Notas e reputação</h1>
       <p className="painel__sub">
         Só quem foi atendido avalia, e cada atendimento vale uma nota. É isso que faz a sua média
         valer mais que a de um site aberto.

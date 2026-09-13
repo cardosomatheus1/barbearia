@@ -14,6 +14,8 @@ import { acaoAssumirRecado, acaoDevolverRecado, acaoEncerrarRecado, acaoResponde
 import { secao } from '../secoes';
 import { AvisoDeRecusa } from '@/app/admin/aviso-de-recusa';
 import { marcaDaRecusa } from '../falha-da-leitura';
+import { painelDeAvaliacoesNaApi } from '@/lib/admin-api';
+import { ARecuperar } from '../avaliacoes/componentes';
 
 /**
  * A fila de recados (bloco 40).
@@ -39,7 +41,7 @@ import { marcaDaRecusa } from '../falha-da-leitura';
  */
 
 export const metadata: Metadata = {
-  title: 'Recados',
+  title: 'O que o cliente disse',
   robots: { index: false, follow: false },
 };
 
@@ -81,6 +83,30 @@ export default async function RecadosPage({ searchParams }: Props) {
   const fila = await recadosDaFila(token, verEncerrados);
   const recados = fila.ok ? fila.dados.recados : [];
 
+  /**
+   * A nota baixa entra na mesma caixa que o recado, e é o bloco 144.
+   *
+   * Seis avaliadores cegos, em quatro rodadas, travaram na mesma pergunta —
+   * *"o cliente reclamou e escreveu, onde eu leio?"* — com confiança 2 de 5 e
+   * respostas divididas. A fronteira que existia era **se veio estrela junto**,
+   * e quem reclama não sabe que fez essa escolha.
+   *
+   * As duas fontes continuam separadas, porque são diferentes de verdade: o
+   * recado é anônimo e pode ser de quem nunca foi atendido, a avaliação é nota
+   * presa a um atendimento concluído. O que se junta é **onde se lê e se age**.
+   *
+   * A permissão é por metade, e não somada: `@Exige` é conjuntivo, e pedir
+   * `feedback.view` **e** `reviews.view` tiraria a tela de quem tem só uma —
+   * e os papéis são editáveis pela barbearia desde o bloco 30. Cada lista
+   * aparece se a sua própria chamada respondeu; a que for recusada some com a
+   * frase, em vez de derrubar a tela inteira.
+   */
+  const reputacao = await painelDeAvaliacoesNaApi(token);
+  const aRecuperar = reputacao.ok ? reputacao.dados.aRecuperar : [];
+  const podeTratar = podeNaTela(estado, 'reviews.recover');
+  const podeContestar = podeNaTela(estado, 'reviews.contest');
+  const fuso = estado.empresa.timezone;
+
   const feito = first(busca['feito']);
   const erro = first(busca['erro']);
 
@@ -100,7 +126,7 @@ export default async function RecadosPage({ searchParams }: Props) {
         </form>
       </header>
       <header className="recados__topo">
-        <h1 className="titulo">Recados</h1>
+        <h1 className="titulo">O que o cliente disse</h1>
         <p className="recados__sub">
           O que os clientes escreveram pela página da barbearia. Nada disto aparece em lugar
           nenhum público.
@@ -112,6 +138,39 @@ export default async function RecadosPage({ searchParams }: Props) {
       ) : null}
       {erro ? (
         <AvisoDeRecusa erro={erro} mapa={FALHA} className="recados__aviso" />
+      ) : null}
+
+      {/*
+        Recusa e falha passageira não se parecem aqui.
+
+        Sem permissão de avaliação, a metade simplesmente não existe para esta
+        conta — é o mesmo desenho do destino de menu que some. Já uma falha de
+        leitura precisa dizer que **havia** algo e não veio, senão a tela mente
+        por omissão: quem tem nota baixa esperando acha que não tem nenhuma.
+      */}
+      {!reputacao.ok && reputacao.code !== 'forbidden' ? (
+        <div className="ui-alert recados__aviso" {...marcaDaRecusa(reputacao.code)}>
+          Não deu para carregar as notas baixas agora. Os recados abaixo estão completos.
+        </div>
+      ) : null}
+
+      {aRecuperar.length > 0 && podeTratar ? (
+        <section aria-labelledby="nota-baixa" className="recados__notas">
+          <h2 className="rotulo" id="nota-baixa">
+            Nota baixa esperando resposta
+          </h2>
+          <p className="recados__sub">
+            Estas têm prazo: a nota vai ao ar de qualquer jeito quando a janela fechar, tratada
+            ou não. Responder não a esconde — conserta o caso.
+          </p>
+          <ul className="recados__lista">
+            {aRecuperar.map((avaliacao) => (
+              <li key={avaliacao.id}>
+                <ARecuperar avaliacao={avaliacao} fuso={fuso} podeContestar={podeContestar} />
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {!fila.ok ? (

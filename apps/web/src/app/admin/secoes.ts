@@ -122,9 +122,9 @@ export const MODULOS = [
     nome: 'Clientes',
     telas: [
       { href: '/admin/clientes', nome: 'Clientes', secao: 'clientes', molde: 'cadastro', nota: 'buscar o cliente e abrir a ficha dele', busca: 'cadastro base telefone aniversario', grupo: 'A base', permissao: ['customers.view'] },
-      { href: '/admin/recados', nome: 'Recados', secao: 'recados', molde: 'gestao', nota: 'recado escrito pelo cliente, sem nota', grupo: 'O que o cliente disse', permissao: ['feedback.view'] },
-      { href: '/admin/recepcao', nome: 'Perguntas sem resposta', secao: 'recepcao', molde: 'operacional', nota: 'perguntas que o site não soube responder', grupo: 'O que o cliente disse', permissao: ['feedback.view'] },
-      { href: '/admin/avaliacoes', nome: 'Avaliações', secao: 'avaliacoes', molde: 'gestao', nota: 'a nota que o cliente deu, e a nota baixa a tratar', grupo: 'O que o cliente disse', permissao: ['reviews.view'] },
+      { href: '/admin/recados', nome: 'O que o cliente disse', secao: 'recados', molde: 'gestao', nota: 'recados e notas baixas: tudo que pede resposta', busca: 'reclamacao recado queixa sugestao elogio nota baixa insatisfeito', grupo: 'Retorno do cliente', permissao: ['feedback.view'] },
+      { href: '/admin/recepcao', nome: 'Perguntas sem resposta', secao: 'recepcao', molde: 'operacional', nota: 'perguntas que o site não soube responder', grupo: 'Retorno do cliente', permissao: ['feedback.view'] },
+      { href: '/admin/avaliacoes', nome: 'Notas e reputação', secao: 'avaliacoes', molde: 'gestao', nota: 'sua média, a que o cliente vê, e todas as notas', busca: 'avaliacao estrela media reputacao contestar publica', grupo: 'Retorno do cliente', permissao: ['reviews.view'] },
     ],
     // A ficha pertence à mesma área, embora continue sendo aberta por id.
     dentro: [{ secao: 'cliente', molde: 'cadastro', nome: 'Ficha do cliente', nota: 'fotos do corte, preferências de máquina e barba, histórico e observações', busca: 'foto antes depois corte preferencia maquina degrade barba alergia observacao anotacao ficha', pai: 'clientes', permissao: ['customers.view'] }],

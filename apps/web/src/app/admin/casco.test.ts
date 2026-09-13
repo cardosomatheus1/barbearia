@@ -215,6 +215,44 @@ describe('o CSS acompanha o casco', () => {
     expect(semRegra.filter((s) => listadas.has(s))).toEqual([]);
   });
 
+  it('a caixa do cliente não exige as duas permissões para abrir', () => {
+    /**
+     * O bloco 144 juntou recado e nota baixa numa tela só, e a armadilha dessa
+     * fusão é a que a convenção já nomeia: **`@Exige` é conjuntivo**. Somar
+     * `reviews.view` a uma tela que pedia `feedback.view` é uma tela a menos
+     * para quem tem só uma das duas — e os papéis são editáveis pela barbearia
+     * desde o bloco 30, então um papel "Marketing" com nota e sem recado é
+     * configuração natural, não hipótese.
+     *
+     * O que prende a regra é a **forma** de ler a segunda fonte: a lista sai de
+     * um ternário sobre o `ok` da própria chamada, e nunca de um `redirect`, um
+     * `throw` ou um retorno antecipado. Assim a metade recusada some e a tela
+     * continua de pé.
+     *
+     * Esta guarda lê o fonte, e o limite vai escrito: ela pega quem trocar o
+     * ternário por uma saída antecipada, e **não** pega quem reescrever a tela
+     * inteira com outra estrutura. Guarda em que se confia mais do que ela
+     * alcança é pior que guarda nenhuma.
+     */
+    const fonte = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'recados', 'page.tsx'),
+      'utf8',
+    );
+
+    expect(
+      /const aRecuperar = reputacao\.ok \? [^:]+: \[\];/.test(fonte),
+      'a nota baixa deixou de degradar para lista vazia quando a permissão falta',
+    ).toBe(true);
+
+    const corpo = fonte.slice(fonte.indexOf('const reputacao'));
+    for (const saida of ['redirect(', 'throw ']) {
+      expect(
+        corpo.slice(0, corpo.indexOf('return (')).includes(saida),
+        `a leitura das avaliações passou a derrubar a tela inteira com ${saida}`,
+      ).toBe(false);
+    }
+  });
+
   it('o nome do módulo continua visível na tela larga', () => {
     /**
      * O trilho perdia os oito nomes do notebook para cima.
