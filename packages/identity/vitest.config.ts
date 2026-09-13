@@ -24,5 +24,24 @@ export default defineConfig({
      * travada, e aí o vermelho é legítimo.
      */
     hookTimeout: 60_000,
+    /**
+     * O corpo também precisa de folga, e pela mesma contenção do gancho acima.
+     *
+     * `reemitir a senha também derruba as sessões abertas` estourou os 5s de
+     * padrão do vitest na esteira. Ele não é lento: **805 ms** medidos nesta
+     * máquina, com a suíte inteira em 82s. Na esteira as mesmas 12 suítes
+     * levaram 366s — 4,5x —, e este teste em particular passou de 6,2x, porque
+     * ele deriva `scrypt` **três vezes** (criar a conta, entrar, reemitir) e o
+     * scrypt é caro de propósito: é a única coisa aqui que disputa CPU com as
+     * outras nove suítes em vez de disputar o banco.
+     *
+     * O gancho ganhou folga no bloco 13 porque a semente é lenta; o corpo ficou
+     * no padrão, e é no corpo que mora o custo desta suíte. `onboarding` já
+     * tinha cobrado a mesma conta, pelo mesmo motivo e com o mesmo número.
+     *
+     * Trinta segundos são ~37x o pior caso medido, e continuam reprovando
+     * travamento de verdade — não é tolerância a lentidão.
+     */
+    testTimeout: 30_000,
   },
 });
