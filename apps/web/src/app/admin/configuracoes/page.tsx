@@ -43,7 +43,7 @@ interface Props {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export const metadata = { title: 'Preferências' };
+export const metadata = { title: 'Horários e regras' };
 
 export default async function ConfiguracoesPage({ searchParams }: Props) {
   const token = await lerSessaoGestor();
@@ -90,7 +90,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
         <header className="painel__topo">
           <a className="painel__marca" href="/admin/onboarding">← {estado.businessName}</a>
         </header>
-        <h1 className="painel__titulo">Preferências</h1>
+        <h1 className="painel__titulo">Horários e regras</h1>
         <div className="ui-alert ui-alert--warning" role="alert" {...marcaDaRecusa(resposta.code)}>
           {semPermissao
             ? 'Você não tem permissão para ver esta tela. Fale com o dono.'
@@ -138,7 +138,7 @@ export default async function ConfiguracoesPage({ searchParams }: Props) {
         * 2), e uma seção fora do sumário do documento, que é o que faz um
         * quadro no topo ler como aviso do sistema em vez de configuração.
         */}
-      <h1 className="painel__titulo">Preferências</h1>
+      <h1 className="painel__titulo">Horários e regras</h1>
 
       {/**
         * A vitrine vem antes do resto, e é uma seção curta de propósito.

@@ -36,7 +36,7 @@ for (const href of LEGADO) {
 // metade dela era caixa de entrada de reclamação, e o que restava — a fila e a
 // comanda — pertence a quem já tem área: a agenda e o dinheiro. "Gestão" saiu
 // porque doze telas sem parentesco não são uma área, são o que sobrou.
-for (const nome of ['Hoje', 'Agenda', 'Clientes', 'Financeiro', 'Crescimento', 'Minha barbearia', 'Marca e lojas', 'Configurações']) {
+for (const nome of ['Hoje', 'Agenda', 'Clientes', 'Financeiro', 'Crescimento', 'A casa', 'Marca e lojas', 'Configurações']) {
   exigir(secoes.includes(`nome: '${nome}'`), `área sem o vocabulário esperado: ${nome}`);
 }
 // `Visão geral`, `Marketing`, `Cadastros`, `Integrações` e `Administração` foram
@@ -46,7 +46,7 @@ for (const nome of ['Hoje', 'Agenda', 'Clientes', 'Financeiro', 'Crescimento', '
 // "Visão geral" e "Cadastros" — é o nome que ocorre a quem olha a lista de
 // fora, e esta linha é o que impede de refazer a decisão sem saber que ela
 // já foi tomada.
-for (const antigo of ["nome: 'Visão geral'", "nome: 'Marketing'", "nome: 'Cadastros'", "nome: 'Integrações'", "nome: 'Administração'", "nome: 'Atendimento'", "nome: 'Gestão'"]) {
+for (const antigo of ["nome: 'Visão geral'", "nome: 'Marketing'", "nome: 'Cadastros'", "nome: 'Integrações'", "nome: 'Administração'", "nome: 'Atendimento'", "nome: 'Gestão'", "nome: 'Minha barbearia'"]) {
   exigir(!secoes.includes(antigo), `vocabulário antigo ainda está como área: ${antigo}`);
 }
 
